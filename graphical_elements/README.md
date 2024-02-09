@@ -1,0 +1,3 @@
+# Graphical elements
+
+This folder hosts the graphical elements of the project: images, logo, ...

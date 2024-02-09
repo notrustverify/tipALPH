@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/node18/tsconfig.json",
+  "compilerOptions": {
+    //"lib": ["ES2022"],
+    //"target": "ES2022", //"ESNext",
+    "module": "ES2020", //"ESNext",
+    "moduleResolution": "Node",
+    "rootDir": "./src",
+    "outDir": "./build",
+    "strict": false,
+    "allowSyntheticDefaultImports": true,
+
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+
+    "skipLibCheck": true,
+    //"strictNullChecks": true
+  },
+  "exclude": [
+    "node_modules",
+    "build",
+    "tests"
+  ],
+  "ts-node": {
+    "transpileOnly": true,
+    "esm": true,
+  }
+}
