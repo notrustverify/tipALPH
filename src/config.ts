@@ -1,6 +1,9 @@
 import { config } from 'dotenv';
+import { existsSync, readFileSync } from 'fs';
 
 config({ path: ['.env', "./data/.env"] });
+const MNEMONIC_FILE = "bot_mnemonic.txt";
+const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 
 export const EnvConfig = {
   fullnode: {
@@ -14,14 +17,20 @@ export const EnvConfig = {
       token: process.env.TG_BOT_TOKEN as string || "",
     },
     admin: {
-      users: (process.env.TG_ADMIN_UIDS as string || "").split(",").map(v => Number(v)),
+      users: (process.env.TG_ADMIN_UIDS as string || "").split(",").filter(v => v.length > 0).map(v => Number(v)),
     },
-  },
-  wallet: {
-    mnemonic: process.env.MNEMONIC as string,
   },
   database: {
     path: process.env.DB_PATH as string,
   },
   isDevEnv: undefined !== process.env.DEV && Boolean(process.env.DEV),
 } as const;
+
+export const readMnemonic = () => {
+  for (let secretFolder of SECRET_FOLDER) {
+    const secretFile = `${secretFolder}/${MNEMONIC_FILE}`;
+    if (existsSync(secretFile))
+      return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'});
+  }
+  throw new Error("mnemonic not found!");
+};

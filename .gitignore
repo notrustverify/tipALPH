@@ -1,6 +1,7 @@
 build
 coverage
 node_modules
+secrets
 
 *.txt
 *.pdf

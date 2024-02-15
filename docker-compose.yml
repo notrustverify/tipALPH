@@ -8,6 +8,10 @@ services:
       - ./data:/usr/app/data
     environment:
       DOTENV_FILE: "./data/"
+      FULLNODE_HOST: alephium
+    secrets:
+      - source: bot_mnemonic.txt
+        mode: 0400
     depends_on:
       - alephium
 
@@ -29,3 +33,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "http://127.0.0.1:22973/infos/self-clique"]
       timeout: 45s
+
+secrets:
+  bot_mnemonic.txt:
+    file: ./secrets/bot_mnemonic.txt
