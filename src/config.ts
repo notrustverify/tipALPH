@@ -23,6 +23,7 @@ export const EnvConfig = {
   database: {
     path: process.env.DB_PATH as string,
   },
+  network: process.env.NETWORK as string || "testnet",
   isDevEnv: undefined !== process.env.DEV && Boolean(process.env.DEV),
 } as const;
 
