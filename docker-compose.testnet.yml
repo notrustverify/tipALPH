@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   alephium:
-    image: alephium/alephium:v2.8.3
+    image: alephium/alephium:v2.8.4
     restart: "no"
     ports:
       - 19973:19973/tcp
@@ -19,5 +19,3 @@ services:
     healthcheck:
       test: ["CMD", "curl", "http://127.0.0.1:22973/infos/self-clique"]
       timeout: 45s
-    networks:
-      - tipalph_default
