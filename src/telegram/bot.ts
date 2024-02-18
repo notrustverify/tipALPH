@@ -1,12 +1,12 @@
 import { Telegraf, Context, Telegram } from 'telegraf';
-//import { message } from 'telegraf/filters';
 import { Repository } from 'typeorm';
 import * as Typegram from '@telegraf/types';
+
+import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
 import { Command } from './command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
-import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
 
 let bot: Telegraf;
 
@@ -106,7 +106,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
   };
   
-  const tipFct = async (ctx/*: Context<Typegram.Update.MessageUpdate>*/) => {
+  const tipFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
 
     const tipSender = await getUserFromTgId(ctx.message.from.id);
     if (null === tipSender) {
@@ -114,14 +114,17 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
+    if (!("text" in ctx.message))
+      return;
+    
     // TODO: ensure that tipping command is valid
 
     // Determine who is the receiver from the message type and reply
-    const isReply = "reply_to_message" in ctx.update.message && undefined !== ctx.update.message.reply_to_message;
+    const isReply = "reply_to_message" in ctx.message && undefined !== ctx.message.reply_to_message;
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
-    const tipAmountRegex = /^\d+\.?\d*$/;
+    const tipAmountRegex = /^\d+(?:\.\d+)?$/;
 
     // These are the values that we are trying to determine
     let receiverTgId: number;
@@ -129,7 +132,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     let args: RegExpMatchArray;
     if (isReply && (args = payload.match(tipAmountRegex)) && 1 == args.length) {
-      receiverTgId = ctx.update.message.reply_to_message.from.id;
+      receiverTgId = ctx.message.reply_to_message.from.id;
       amountAsString = args[0];
     }
     else {
@@ -169,6 +172,93 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       });
     });
   };
+
+  const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    if ("private" !== ctx.message.chat.type)
+      return;
+
+    if (!("text" in ctx.message))
+      return;
+
+    console.log("withdraw");
+
+    const sender = await getUserFromTgId(ctx.message.from.id);
+
+    const messageText = ctx.message.text as string;
+    const payload: string = messageText.replace(`/withdraw@${ctx.me}`, "").replace("/withdraw", "").trim();
+    const sendAmountDestRegex = /^(\d+(?:\.\d+)?) ([a-zA-Z0-9]{45})$/;
+
+    // These are the values that we are trying to determine
+    let amountAsString: string;
+    let destinationAddress: string;
+
+    let args: RegExpMatchArray;
+    if ((args = payload.match(sendAmountDestRegex)) && 3 == args.length) {
+      amountAsString = args[1];
+      destinationAddress = args[2];
+    }
+    else {
+      ctx.reply("Wrong withdrawal format, sorry.");
+      return;
+    }
+
+    let lastMsg = await ctx.reply("Withdrawal status: started");
+
+    console.log(`${sender.telegramId} sends ${amountAsString} ALPH to ${destinationAddress}`);
+
+    alphClient.sendAmountToAddressFrom(sender, amountAsString, destinationAddress)
+    .then(txId => {
+      console.log("Validated!");
+      replyTo(ctx, lastMsg, "Withdrawal status: confirmed");
+      ctx.replyWithHTML(`<a href="${EnvConfig.network}.alephium.org/transactions/${txId}">Transaction</a>`);
+    })
+    .catch((err) => {
+      if (err instanceof NetworkError) {
+        console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
+      }
+      else if (err instanceof NotEnoughFundsError) {
+        console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
+      }
+      else {
+        console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
+      }
+
+      replyTo(ctx, lastMsg, "Withdrawal status: failed");
+    });
+  };
+
+  const consolidateUTXOFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    if ("private" !== ctx.message.chat.type)
+      return;
+
+    console.log("Consolidate UTXO");
+    let lastMsg = await ctx.reply("Consolidation status: started");
+    const user = await getUserFromTgId(ctx.message.from.id);
+    alphClient.consolidateIfRequired(user)
+    .then(txIds => {
+      if (undefined === txIds) {
+        console.log("Consolidation aborted (not required)")
+        replyTo(ctx, lastMsg, "Consolidation status: aborted (not required)");
+        return;
+      }
+      console.log("Validated!");
+      replyTo(ctx, lastMsg, "Consolidation status: confirmed");
+      ctx.replyWithHTML(`<a href="${EnvConfig.network}.alephium.org/transactions/${txIds}">Transaction</a>`);
+    })
+    .catch((err) => {
+      if (err instanceof NetworkError) {
+        console.error(genLogMessageErrorWhile("consolidating utxo", err.message, user));
+      }
+      else if (err instanceof NotEnoughFundsError) {
+        console.error(genLogMessageErrorWhile("consolidating utxo", err.message, user));
+      }
+      else {
+        console.error(new GeneralError("consolidating utxo", { error: err, context: { user } }));
+      }
+
+      replyTo(ctx, lastMsg, "Consolidation status: failed");
+    });
+  };
   
   const privacyFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type)
@@ -180,7 +270,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     privacyMessage += "\t\t- Telegram username\n";
     privacyMessage += "\nThese are associated it with an Alephium address and an ID that I use to remember you\n";
     privacyMessage += "This is the minimal amount of data I need to know and store in order to enable you to tip other Alephium enthusiasts.\n";
-    privacyMessage += "\nWhile I receive every message that is sent in the chats I am in (to allow you to command me), I do not consider them if they are not for me. ";
+    privacyMessage += "\nWhile I receive every message that is sent in the chats I am in (to allow you to command me), I do not consider them if they are not for me.";
     privacyMessage += "\nIf you want me to forget about you and delete the data I have about you, you can run /forgetme";
     ctx.reply(privacyMessage);
   };
@@ -255,6 +345,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("address", "Display the address of your account", addressFct),
     new Command("balance", "Display the balance of your account", balanceFct),
     new Command("tip", "Allow you to tip other users", tipFct),
+    new Command("withdraw", "Sends a given amount to a given address (bot takes fees!)", withdrawFct),
+    new Command("consolidate", "Consolidate these UTXO", consolidateUTXOFct),
     new Command("privacy", "Display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "Ask the bot to forget about you", forgetmeFct),
     new Command("help", "Display the help message of the bot", helpFct),

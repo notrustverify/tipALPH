@@ -4,9 +4,11 @@ import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
-import { FullNodeConfig } from "./config.js";
+import { EnvConfig, FullNodeConfig } from "./config.js";
 import { ErrorTypes, GeneralError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
 import { User } from "./db/user.js";
+
+const NUM_UTXO_BEFORE_CONSOLIDATE = 3;
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -64,29 +66,98 @@ export class AlphClient {
     const newTx = await senderWallet.signAndSubmitTransferTx({
       signerAddress: (await senderWallet.getSelectedAccount()).address,
       destinations: [
-        { address: receiver.address, attoAlphAmount: convertAlphAmountWithDecimals(amount)! }
+        { address: receiver.address, attoAlphAmount: convertAlphAmountWithDecimals(amount) }
       ]
     })
     .catch((err) => {
       if (alphErrorIsNetworkError(err))
         return Promise.reject(new NetworkError(err));
       else if (alphErrorIsNotEnoughFundsError(err))
-        return Promise.reject(new NotEnoughFundsError(err))
+        return Promise.reject(new NotEnoughFundsError(err));
       else
         return Promise.reject(err);
     });
     
     await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
 
+    // Check for consolidation from time to time
+    this.consolidateIfRequired(sender).catch(console.error);
+    this.consolidateIfRequired(receiver).catch(console.error);
+
     return newTx.txId;
   }
 
-  async sendAmountToAddressFrom(user: User, amount: number, address: string): Promise<string> {
-    return "hum";
+  async sendAmountToAddressFrom(user: User, amount: string, destinationAddress: string): Promise<string> {
+    const userWallet = this.getUserWallet(user);
+
+    const attoAlphAmount = convertAlphAmountWithDecimals(amount);
+    const destinations = [
+      { address: destinationAddress, attoAlphAmount },
+    ]
+
+    if (undefined !== EnvConfig.operator.address) {
+      const operatorPart = attoAlphAmount/BigInt(100) * BigInt(EnvConfig.operator.fees);
+      console.log(`Collecting ${operatorPart} (${EnvConfig.operator.fees}%) fees on ${EnvConfig.operator.address}`);
+      destinations.push({ address: EnvConfig.operator.address, attoAlphAmount: operatorPart });
+    }
+    const newTx = await userWallet.signAndSubmitTransferTx({
+      signerAddress: (await userWallet.getSelectedAccount()).address,
+      destinations,
+    })
+    .catch((err) => {
+      if (alphErrorIsNetworkError(err))
+        return Promise.reject(new NetworkError(err));
+      else if (alphErrorIsNotEnoughFundsError(err))
+        return Promise.reject(new NotEnoughFundsError(err));
+      else
+        return Promise.reject(err);
+    });
+    
+    await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
+
+    // Check for consolidation from time to time
+    this.consolidateIfRequired(user).catch(console.error);
+
+    return newTx.txId;
   }
 
-  async consolidateUTXO(user: User) {
-    
+  async consolidateIfRequired(user: User): Promise<string> {
+    const userWallet = this.getUserWallet(user);
+    return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: true })
+    .then(async (addressBalance) => { 
+      if (addressBalance.utxoNum < NUM_UTXO_BEFORE_CONSOLIDATE) {
+        console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for this user wallet`);
+        return;
+      }
+      const tx = await this.consolidateUTXO(userWallet)[0]; 
+      console.log(tx);
+      return tx;
+    })
+    .catch((err) => {
+      if (alphErrorIsNetworkError(err))
+        return Promise.reject(new NetworkError(err));
+      else
+        return Promise.reject(err);
+    });
+  }
+
+  // Inspired from https://github.com/alephium/alephium-web3/blob/master/test/exchange.test.ts#L60
+  async consolidateUTXO(userWallet: PrivateKeyWallet): Promise<string[]> {
+    return this.nodeProvider.transactions.postTransactionsSweepAddressBuild({
+      fromPublicKey: userWallet.publicKey,
+      toAddress: userWallet.address,
+    })
+    .then(sweepResults =>
+      sweepResults.unsignedTxs.map(tx => userWallet.signAndSubmitUnsignedTx({ signerAddress: userWallet.address, unsignedTx: tx.unsignedTx }))
+    )
+    .then(promises => Promise.all(promises))
+    .then(txResults => txResults.map(tx => tx.txId))
+    .catch((err) => {
+      if (alphErrorIsNetworkError(err))
+        return Promise.reject(new NetworkError(err));
+      else
+        return Promise.reject(err);
+    });
   }
 }
 
