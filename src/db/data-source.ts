@@ -19,4 +19,6 @@ AppDataSource.initialize()
       // here you can start to work with your database
       console.log("Database initialized");
   })
-  .catch((error) => console.log(error))
+  .catch((error) => {
+    throw new Error(`failed to initialize the database: ${error}`);
+  });

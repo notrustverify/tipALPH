@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/notrustverify/TipAlph#readme",
   "devDependencies": {
-    "@alephium/web3-test": "^0.29.3",
+    "@alephium/web3-test": "^0.30.1",
     "@babel/preset-env": "^7.23.9",
     "@grammyjs/types": "^3.3.0",
     "@telegraf/types": "^6.9.1",
@@ -46,9 +46,9 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@alephium/cli": "^0.29.3",
-    "@alephium/web3": "^0.29.3",
-    "@alephium/web3-wallet": "^0.29.3",
+    "@alephium/cli": "^0.30.1",
+    "@alephium/web3": "^0.30.1",
+    "@alephium/web3-wallet": "^0.30.1",
     "async-mutex": "^0.4.1",
     "bip39": "^3.1.0",
     "dotenv": "^16.4.3",

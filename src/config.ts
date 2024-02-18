@@ -5,12 +5,21 @@ config({ path: ['.env', "./data/.env"] });
 const MNEMONIC_FILE = "bot_mnemonic.txt";
 const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 
+export interface FullNodeConfig {
+  readonly protocol: string,
+  readonly host: string,
+  readonly port: number,
+  readonly addr: () => string,
+  readonly apiKey?: string,
+}
+
 export const EnvConfig = {
   fullnode: {
     protocol: process.env.FULLNODE_PROTOCOL as string,
     host: process.env.FULLNODE_HOST as string,
     port: Number(process.env.FULLNODE_PORT),
     addr: () => `${EnvConfig.fullnode.protocol}://${EnvConfig.fullnode.host}:${EnvConfig.fullnode.port}`,
+    apiKey: process.env.FULLNODE_API_KEY as string,
   },
   telegram: {
     bot: {

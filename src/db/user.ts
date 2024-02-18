@@ -24,6 +24,10 @@ export class User {
   address: string;
 
   toString(): string {
-    return `User with TG ${this.telegramId} / ${this.telegramUsername}`;
+    return `user TG "${this.telegramUsername}" (id: ${this.telegramId})`;
+  }
+
+  toJSON(): string {
+    return JSON.stringify(this);
   }
 }

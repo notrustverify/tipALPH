@@ -16,7 +16,10 @@ const userRepository = AppDataSource.getRepository(User);
 
 // TODO: Ensure that we have at least 4 addresses for collecting withdrawal fees
 
-createAlphClient(EnvConfig.fullnode.addr(), readMnemonic(), userRepository)
+createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode)
   .then(alphClient => {
     runTelegram(alphClient, userRepository);
+  })
+  .catch(err => {
+    console.error("Failed to start:", err);
   });

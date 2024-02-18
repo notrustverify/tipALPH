@@ -1,9 +1,11 @@
 //import { AppDataSource } from "../src/db/data-source";
-import "reflect-metadata" // Required by Typeorm
-import { AlphClient, createAlphClient } from "../src/alephium";
-import { User } from "../src/db/user";
-import { DataSource } from "typeorm"
+import { DataSource, Repository } from "typeorm"
 import * as bip39 from 'bip39';
+import "reflect-metadata" // Required by Typeorm
+
+import { AlphClient, createAlphClient } from "../src/alephium";
+import { FullNodeConfig } from "../src/config";
+import { User } from "../src/db/user";
 
 // https://gist.github.com/Ciantic/be6a8b8ca27ee15e2223f642b5e01549
 export const AppDataSource = new DataSource({
@@ -17,7 +19,7 @@ export const AppDataSource = new DataSource({
 
 let alphClient: AlphClient;
 const testMnemonic = bip39.generateMnemonic(256);
-let userRepository;
+let userRepository: Repository<User>;
 
 beforeAll(async() => {
   console.log(`Initializing account with mnemonic:\n${testMnemonic}`);
@@ -26,7 +28,25 @@ beforeAll(async() => {
 
   userRepository = AppDataSource.getRepository(User);
 
-  alphClient = await createAlphClient("http://127.0.0.1:22973", testMnemonic, userRepository);
+  const fullNodeConfig: FullNodeConfig = {
+    protocol: "http",
+    host: "127.0.0.1",
+    port: 22973,
+    addr: () => "http://127.0.0.1:22973",
+  }
+  alphClient = await createAlphClient(() => testMnemonic, userRepository, fullNodeConfig);
+});
+
+describe('Regarding NodeProvider', function () {
+  it("should fail if NodeProvider is un-available", () => {
+    const fullNodeConfig: FullNodeConfig = {
+      protocol: "http",
+      host: "11",
+      port: 22,
+      addr: () => "http://11:22",
+    }
+    expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig)).rejects;
+  });
 });
 
 describe('Test AlphClient', function () {

@@ -6,6 +6,7 @@ import { Command } from './command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
+import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
 
 let bot: Telegraf;
 
@@ -42,16 +43,27 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     // Creation of wallet
     let user = new User(userId, username);
-    let lastTgMsg: Typegram.Message;
-    try {
-      lastTgMsg = await ctx.reply("Initializing a new wallet...");
+    user = await ctx.reply("Initializing a new wallet...")
+    .then(lastTgMsg => {
       console.log(`Attempt to register "${user.telegramUsername}" (id: ${user.telegramId})`);
-      user = await alphClient.registerUser(user);
-      replyTo(ctx, lastTgMsg, "A new wallet has been initialized!");
-    } catch (err) {
-      // If an error occured, user already exists. We retrieve it
-      replyTo(ctx, lastTgMsg, "It seems that you already have an account!");
-      user = await getUserFromTgId(userId);
+      return alphClient.registerUser(user)
+      .then(user => {
+        replyTo(ctx, lastTgMsg, "A new wallet has been initialized!");
+        return user;
+      })
+      .catch((err) => {
+        if (ErrorTypes.USER_ALREADY_REGISTERED !== err) {
+          console.error(genLogMessageErrorWhile("initilize wallet (UN-EXPECTED)", err, user));
+          return null;
+        }
+        replyTo(ctx, lastTgMsg, "You already have an initialized account!");
+        return getUserFromTgId(userId);
+      });
+    });
+
+    if (null === user) {
+      ctx.reply(genUserMessageErrorWhile("ensuring the initialization of your account"));
+      return;
     }
 
     // Display balance
@@ -61,7 +73,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   const addressFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
-      ctx.reply("It seems that you haven't initialized your wallet yet. Send /start to do it!");
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
       return;
     }
     sendAddressMessage(ctx, user);
@@ -73,16 +85,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   
   const sendBalanceMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
     alphClient.getUserBalance(user)
-    .then(userBalance => {
-      if (undefined === userBalance) {
-        console.log(`Failed to retrieve balance for user "${user.id}".`);
-        ctx.reply("I'm sorry, it seems that I cannot retrieve your account balance for the moment.");
-        return;
-      }
-      ctx.reply(`Your account currently holds: ${userBalance} ALPH`);
-    })
+    .then(userBalance => ctx.reply(`Your account currently holds: ${userBalance} ALPH`))
     .catch(err => {
-      console.log(`An error occured when fetching balance for user ${user.id} (err: ${err})`);
+      ctx.reply(genUserMessageErrorWhile("retrieving your account balance"));
+      console.error(genLogMessageErrorWhile("fetch balance", err, user));
     });
   };
 
@@ -91,21 +97,20 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
-    const user = await getUserFromTgId(ctx.message.from.id);
-    if (null === user) {
-      ctx.reply("It seems that you haven't initialized your wallet yet. Send /start to do it!");
-      return;
-    }
-
-    sendBalanceMessage(ctx, user);
+    return getUserFromTgId(ctx.message.from.id).then(user => {
+      if (null === user) {
+        ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
+        return;
+      }
+      sendBalanceMessage(ctx, user);
+    });
   };
   
   const tipFct = async (ctx/*: Context<Typegram.Update.MessageUpdate>*/) => {
-    console.log("tip");
 
     const tipSender = await getUserFromTgId(ctx.message.from.id);
     if (null === tipSender) {
-      ctx.reply("It seems that you haven't initialized your wallet yet. Send /start to do it!");
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
       return;
     }
 
@@ -115,7 +120,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     const isReply = "reply_to_message" in ctx.update.message && undefined !== ctx.update.message.reply_to_message;
 
     const messageText = ctx.message.text as string;
-    const payload = messageText.substring("/tip".length).trim();
+    const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
     const tipAmountRegex = /^\d+\.?\d*$/;
 
     // These are the values that we are trying to determine
@@ -128,7 +133,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       amountAsString = args[0];
     }
     else {
-      ctx.reply("Wrong format, sorry.");
+      ctx.reply("Wrong tipping format, sorry.");
       return;
     }
 
@@ -139,14 +144,27 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let previousReply = await ctx.reply("Tipping in progress");
     getUserFromTgId(receiverTgId).then(tipReceiver => {
       if (null === tipReceiver) {
-        ctx.reply("This user has no wallet yet.");
+        ctx.reply("This user has no wallet yet.");  // TODO: should handle this case in the future
         return;
       }
       alphClient.transferFromUserToUser(tipSender, tipReceiver, amountAsString)
       .then(txId => {
         ctx.replyWithHTML(`Tipping completed (<a href="https://${EnvConfig.network}.alephium.org/transactions/${txId}">tx</a>).`);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof NetworkError) {
+          console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
+        }
+        else if (err instanceof NotEnoughFundsError) {
+          console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
+        }
+        else {
+          console.error(new GeneralError("failed to tip", {
+            error: err,
+            context: { "sender_id": tipSender.id, "received_id": tipReceiver.id, "amount": amountAsString }
+          }));
+        }
+
         replyTo(ctx, previousReply, "Tipping failed.");
       });
     });
@@ -194,15 +212,15 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     await next();
   });
 
+  // Middleware filters out messages that are not text
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if (!ctx.message.from.is_bot) {
+    if (ctx.message !== undefined && 'text' in ctx.message) {
       await next();
     }
   });
 
-  // Middleware filters out messages that are not text
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if (ctx.message !== undefined && 'text' in ctx.message) {
+    if (!ctx.message.from.is_bot) {
       await next();
     }
   });
