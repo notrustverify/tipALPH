@@ -8,7 +8,7 @@ import { EnvConfig, FullNodeConfig } from "./config.js";
 import { ErrorTypes, GeneralError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
 import { User } from "./db/user.js";
 
-const NUM_UTXO_BEFORE_CONSOLIDATE = 3;
+const NUM_UTXO_BEFORE_CONSOLIDATE = 50;
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -165,19 +165,35 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
   console.log(`Using ${fullnodeInfo.addr()} as fullnode${fullnodeInfo.apiKey ? " with API key!" : ""}`);
   const nodeProvider = fullnodeInfo.apiKey ? new NodeProvider(fullnodeInfo.addr(), fullnodeInfo.apiKey) : new NodeProvider(fullnodeInfo.addr());
 
-  // Attempt to connect to fullnode
+  // Attempt to connect to fullnode (without using the Alephium SDK)
+  let selfCliqueReq: Response;
   try {
-    const nodeProviderInfos = await nodeProvider.infos.getInfosSelfClique();
-    if (!nodeProviderInfos.synced) {
-      return Promise.reject("fullnode is not synced");
-    }
+    selfCliqueReq = await fetch(`${fullnodeInfo.addr()}/infos/self-clique`);
+    if (200 !== selfCliqueReq.status)
+      return Promise.reject(`fullnode returned ${selfCliqueReq.status} (not 200 OK)`);
   }
   catch (err) {
-    if (!alphErrorIsNetworkError(err)) {
-      throw err;
-    }
-    return Promise.reject("fullnode is not available");
+    return Promise.reject("fullnode is not reachable");
   }
+  
+  let selfCliqueContent: any;
+  try {
+    selfCliqueContent = await selfCliqueReq.json();
+  }
+  catch {
+    return Promise.reject("fullnode replied non-json body");
+  }
+  
+  if (!selfCliqueContent.selfReady) {
+    console.error(selfCliqueContent);
+    return Promise.reject("fullnode is not ready");    
+  }
+  
+  if (!selfCliqueContent.synced) {
+    console.error(selfCliqueContent);
+    return Promise.reject("fullnode is not synced");
+  }
+
   console.log("NodeProvider is ready and synced!");
 
   return new AlphClient(nodeProvider, mnemonicReader, userStore);

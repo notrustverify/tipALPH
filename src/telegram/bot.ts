@@ -346,7 +346,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("balance", "Display the balance of your account", balanceFct),
     new Command("tip", "Allow you to tip other users", tipFct),
     new Command("withdraw", "Sends a given amount to a given address (bot takes fees!)", withdrawFct),
-    new Command("consolidate", "Consolidate these UTXO", consolidateUTXOFct),
+    //new Command("consolidate", "Consolidate these UTXO", consolidateUTXOFct),
     new Command("privacy", "Display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "Ask the bot to forget about you", forgetmeFct),
     new Command("help", "Display the help message of the bot", helpFct),

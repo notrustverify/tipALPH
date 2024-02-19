@@ -15,9 +15,8 @@
     "package": "docker build -t tipalph ."
   },
   "engines": {
-    "node": "=18.19.0",
-    "npm": ">=10.2.3",
-    "pnpm": ">=8.15.3"
+    "node": ">=18.19.0",
+    "npm": ">=10.2.3"
   },
   "repository": {
     "type": "git",

@@ -1,6 +1,4 @@
-import { Number256 } from "@alephium/web3";
 import { User } from "./db/user";
-import assert from "assert";
 
 export enum ErrorTypes {
     NOT_ENOUGH_MONEY = "not enough money",
@@ -24,10 +22,10 @@ export class GeneralError extends Error {
   constructor(message: string, options: { error?: Error, context?: Jsonable } = {}) {
     const { error, context } = options;
 
-    super(message, { cause: error })
-    this.name = this.constructor.name
+    super(message, error );
+    this.name = this.constructor.name;
 
-    this.context = context
+    this.context = context;
   }
 }
 

@@ -17,8 +17,8 @@ export const AppDataSource = new DataSource({
 AppDataSource.initialize()
   .then(() => {
       // here you can start to work with your database
-      console.log("Database initialized");
+      console.log("Initialized connection to database");
   })
   .catch((error) => {
-    throw new Error(`failed to initialize the database: ${error}`);
+    throw new Error(`failed to initialize connection to the database: ${error}`);
   });
