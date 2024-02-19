@@ -8,9 +8,7 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-if (EnvConfig.isDevEnv) {
-  console.log("Proceeding in dev environment");
-}
+console.log(`Proceeding in the ${EnvConfig.network}`);
 
 const userRepository = AppDataSource.getRepository(User);
 

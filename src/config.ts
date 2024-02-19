@@ -33,7 +33,6 @@ export const EnvConfig = {
     path: process.env.DB_PATH as string,
   },
   network: process.env.NETWORK as string || "testnet",
-  isDevEnv: undefined !== process.env.DEV && Boolean(process.env.DEV),
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
     address: process.env.OPERATOR_WALLET_ADDRESS as string,

@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import * as Typegram from '@telegraf/types';
 
 import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
-import { Command } from './command.js';
+import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
@@ -330,9 +330,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   });
 
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    console.time(`Processing update ${ctx.update.update_id} from ${ctx.from!.id}`);
+    console.time(`Processing update ${ctx.update.update_id} from ${ctx.from.id}`);
     await next() // runs next middleware
-    console.timeEnd(`Processing update ${ctx.update.update_id} from ${ctx.from!.id}`);
+    console.timeEnd(`Processing update ${ctx.update.update_id} from ${ctx.from.id}`);
   });
 
 

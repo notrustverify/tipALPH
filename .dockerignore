@@ -1,7 +1,10 @@
+.git
+build
 coverage
 data
 doc
 fullnode
 graphical_elements
 node_modules
+secrets
 tests
