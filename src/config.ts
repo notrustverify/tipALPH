@@ -36,6 +36,9 @@ export const EnvConfig = {
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
     address: process.env.OPERATOR_WALLET_ADDRESS as string,
+  },
+  bot: {
+    nb_utxo_before_consolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
   }
 } as const;
 

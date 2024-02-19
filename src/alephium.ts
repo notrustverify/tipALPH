@@ -8,8 +8,6 @@ import { EnvConfig, FullNodeConfig } from "./config.js";
 import { ErrorTypes, GeneralError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
 import { User } from "./db/user.js";
 
-const NUM_UTXO_BEFORE_CONSOLIDATE = 50;
-
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
   private readonly mnemonicReader: () => string;    // TODO: replace by secure storage
@@ -125,7 +123,7 @@ export class AlphClient {
     const userWallet = this.getUserWallet(user);
     return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: true })
     .then(async (addressBalance) => { 
-      if (addressBalance.utxoNum < NUM_UTXO_BEFORE_CONSOLIDATE) {
+      if (addressBalance.utxoNum < EnvConfig.bot.nb_utxo_before_consolidation) {
         console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for this user wallet`);
         return;
       }
