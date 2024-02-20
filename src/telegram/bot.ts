@@ -1,14 +1,14 @@
-import { Telegraf, Context, Telegram } from 'telegraf';
-import { Repository } from 'typeorm';
+import { prettifyAttoAlphAmount } from '@alephium/web3';
+import { Telegraf, Context } from 'telegraf';
 import * as Typegram from '@telegraf/types';
+import { Repository } from 'typeorm';
 
 import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
+import { TransactionStatus } from '../transactionStatus.js';
 import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
-import { prettifyAttoAlphAmount } from '@alephium/web3';
-import { TransactionStatus } from '../transactionStatus.js';
 
 let bot: Telegraf;
 
@@ -150,7 +150,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
     const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`);
-    let previousReply = await ctx.replyWithHTML(txStatus.toString());
+    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id } );
     txStatus.setDisplayUpdate((update: string) => replyTo(ctx, previousReply, update));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -217,7 +217,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     }
 
     const txStatus = new TransactionStatus(`Withdrawal of ${amountAsString} ALPH`);
-    let lastMsg = await ctx.replyWithHTML(txStatus.toString());
+    let lastMsg = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
     txStatus.setDisplayUpdate((update: string) => replyTo(ctx, lastMsg, update));
 
     console.log(`${sender.telegramId} sends ${amountAsString} ALPH to ${destinationAddress}`);
@@ -241,41 +241,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       txStatus.setFailed().displayUpdate();
     });
   };
-
-  /*
-  const consolidateUTXOFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    if ("private" !== ctx.message.chat.type)
-      return;
-
-    console.log("Consolidate UTXO");
-    let lastMsg = await ctx.reply("Consolidation status: started");
-    const user = await getUserFromTgId(ctx.message.from.id);
-    alphClient.consolidateIfRequired(user)
-    .then(txIds => {
-      if (undefined === txIds) {
-        console.log("Consolidation aborted (not required)")
-        replyTo(ctx, lastMsg, "Consolidation status: aborted (not required)");
-        return;
-      }
-      console.log("Validated!");
-      replyTo(ctx, lastMsg, "Consolidation status: confirmed");
-      ctx.replyWithHTML(`<a href="${EnvConfig.network}.alephium.org/transactions/${txIds}">Transaction</a>`);
-    })
-    .catch((err) => {
-      if (err instanceof NetworkError) {
-        console.error(genLogMessageErrorWhile("consolidating utxo", err.message, user));
-      }
-      else if (err instanceof NotEnoughFundsError) {
-        console.error(genLogMessageErrorWhile("consolidating utxo", err.message, user));
-      }
-      else {
-        console.error(new GeneralError("consolidating utxo", { error: err, context: { user } }));
-      }
-
-      replyTo(ctx, lastMsg, "Consolidation status: failed");
-    });
-  };
-  */
   
   const privacyFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type)
