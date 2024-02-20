@@ -7,6 +7,8 @@ import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
+import { prettifyAttoAlphAmount } from '@alephium/web3';
+import { TransactionStatus } from '../transactionStatus.js';
 
 let bot: Telegraf;
 
@@ -22,7 +24,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    */
 
   const replyTo = (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string) => {
-    ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText);
+    ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode: "HTML" });
   };
 
   const getUserFromTgId = (userId: number): Promise<User> => {
@@ -34,6 +36,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    */
 
   const startFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    if ("private" !== ctx.update.message.chat.type) {
+      return;
+    }
     console.log("start");
     const username = ctx.from.username;
     const userId = ctx.message.from.id;
@@ -80,7 +85,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   };
 
   const sendAddressMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
-    ctx.replyWithHTML(`Your address is ${user.address}.\nYou can see its status <a href="https://${EnvConfig.network}.alephium.org/addresses/${user.address}">here</a> and your balance with /balance.`);
+    const link = undefined !== EnvConfig.explorerAddress() ? `its status <a href="https://${EnvConfig.explorerAddress()}.alephium.org/addresses/${user.address}">here</a> and ` : "";
+    ctx.replyWithHTML(`Your address is ${user.address}.\nYou can see ${link} your balance with /balance.`);
   };
   
   const sendBalanceMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
@@ -116,43 +122,53 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     if (!("text" in ctx.message))
       return;
-    
-    // TODO: ensure that tipping command is valid
 
     // Determine who is the receiver from the message type and reply
     const isReply = "reply_to_message" in ctx.message && undefined !== ctx.message.reply_to_message;
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
-    const tipAmountRegex = /^\d+(?:\.\d+)?$/;
+    const tipAmountRegex = /^\d+(?:[.,]\d+)?$/;
 
     // These are the values that we are trying to determine
     let receiverTgId: number;
+    let receiverTgUsername: string;
     let amountAsString: string;
 
     let args: RegExpMatchArray;
     if (isReply && (args = payload.match(tipAmountRegex)) && 1 == args.length) {
       receiverTgId = ctx.message.reply_to_message.from.id;
+      receiverTgUsername = ctx.message.reply_to_message.from.username;
       amountAsString = args[0];
     }
     else {
+      console.log(`Got: "${payload}", resulting in ${args}`);
       ctx.reply("Wrong tipping format, sorry.");
       return;
     }
 
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
-    // Now that we know the sender, receiver and amount, we can proceed to the transfer
+    const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`);
+    let previousReply = await ctx.replyWithHTML(txStatus.toString());
+    txStatus.setDisplayUpdate((update: string) => replyTo(ctx, previousReply, update));
 
-    let previousReply = await ctx.reply("Tipping in progress");
+    // Now that we know the sender, receiver and amount, we can proceed to the transfer
     getUserFromTgId(receiverTgId).then(tipReceiver => {
       if (null === tipReceiver) {
         ctx.reply("This user has no wallet yet.");  // TODO: should handle this case in the future
         return;
       }
-      alphClient.transferFromUserToUser(tipSender, tipReceiver, amountAsString)
+      alphClient.transferFromUserToUser(tipSender, tipReceiver, amountAsString, txStatus)
       .then(txId => {
-        ctx.replyWithHTML(`Tipping completed (<a href="https://${EnvConfig.network}.alephium.org/transactions/${txId}">tx</a>).`);
+        txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
+        /*  // If we want to warn users about ins and outs
+        if ("private" !== ctx.chat.type) {
+          ctx.telegram.sendMessage(tipSender.telegramId, `You successfully tipped ${amountAsString} ALPH to ${tipReceiver.telegramUsername}`);
+        }
+        if (ctx.botInfo.id != tipReceiver.telegramId)
+          ctx.telegram.sendMessage(tipReceiver.telegramId, `You received ${amountAsString} ALPH from ${tipSender.telegramUsername}`);
+        */
       })
       .catch((err) => {
         if (err instanceof NetworkError) {
@@ -160,6 +176,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         }
         else if (err instanceof NotEnoughFundsError) {
           console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
+          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot sent ${prettifyAttoAlphAmount(err.requiredFunds)} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds)} ALPH`);
         }
         else {
           console.error(new GeneralError("failed to tip", {
@@ -168,16 +185,13 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
           }));
         }
 
-        replyTo(ctx, previousReply, "Tipping failed.");
+        txStatus.setFailed().displayUpdate();
       });
     });
   };
 
   const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    if ("private" !== ctx.message.chat.type)
-      return;
-
-    if (!("text" in ctx.message))
+    if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
 
     console.log("withdraw");
@@ -186,7 +200,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/withdraw@${ctx.me}`, "").replace("/withdraw", "").trim();
-    const sendAmountDestRegex = /^(\d+(?:\.\d+)?) ([a-zA-Z0-9]{45})$/;
+    const sendAmountDestRegex = /^(\d+(?:[.,]\d+)?) ([a-zA-Z0-9]{45})$/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -202,15 +216,16 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
-    let lastMsg = await ctx.reply("Withdrawal status: started");
+    const txStatus = new TransactionStatus(`Withdrawal of ${amountAsString} ALPH`);
+    let lastMsg = await ctx.replyWithHTML(txStatus.toString());
+    txStatus.setDisplayUpdate((update: string) => replyTo(ctx, lastMsg, update));
 
     console.log(`${sender.telegramId} sends ${amountAsString} ALPH to ${destinationAddress}`);
 
-    alphClient.sendAmountToAddressFrom(sender, amountAsString, destinationAddress)
+    alphClient.sendAmountToAddressFrom(sender, amountAsString, destinationAddress, txStatus)
     .then(txId => {
-      console.log("Validated!");
-      replyTo(ctx, lastMsg, "Withdrawal status: confirmed");
-      ctx.replyWithHTML(`<a href="${EnvConfig.network}.alephium.org/transactions/${txId}">Transaction</a>`);
+      console.log("Withdraw successfull!");
+      txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
     })
     .catch((err) => {
       if (err instanceof NetworkError) {
@@ -223,10 +238,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
       }
 
-      replyTo(ctx, lastMsg, "Withdrawal status: failed");
+      txStatus.setFailed().displayUpdate();
     });
   };
 
+  /*
   const consolidateUTXOFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type)
       return;
@@ -259,6 +275,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       replyTo(ctx, lastMsg, "Consolidation status: failed");
     });
   };
+  */
   
   const privacyFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type)
@@ -346,7 +363,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("balance", "Display the balance of your account", balanceFct),
     new Command("tip", "Allow you to tip other users", tipFct),
     new Command("withdraw", "Sends a given amount to a given address (bot takes fees!)", withdrawFct),
-    //new Command("consolidate", "Consolidate these UTXO", consolidateUTXOFct),
     new Command("privacy", "Display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "Ask the bot to forget about you", forgetmeFct),
     new Command("help", "Display the help message of the bot", helpFct),

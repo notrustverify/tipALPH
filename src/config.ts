@@ -32,7 +32,17 @@ export const EnvConfig = {
   database: {
     path: process.env.DB_PATH as string,
   },
-  network: process.env.NETWORK as string || "testnet",
+  network: process.env.NETWORK as string || "devnet",
+  explorerAddress: () => {
+    switch (EnvConfig.network) {
+      case "mainnet":
+        return "https://explorer.alephium.org";
+      case "testnet":
+        return "https://testnet.alephium.org";
+      default:
+        return undefined;
+    }
+  },
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
     address: process.env.OPERATOR_WALLET_ADDRESS as string,

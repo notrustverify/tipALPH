@@ -7,6 +7,7 @@ import { Mutex } from 'async-mutex';
 import { EnvConfig, FullNodeConfig } from "./config.js";
 import { ErrorTypes, GeneralError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
 import { User } from "./db/user.js";
+import { TransactionStatus } from "./transactionStatus.js";
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -58,7 +59,7 @@ export class AlphClient {
     });
   }
 
-  async transferFromUserToUser(sender: User, receiver: User, amount: string): Promise<string> {
+  async transferFromUserToUser(sender: User, receiver: User, amount: string, txStatus?: TransactionStatus): Promise<string> {
     const senderWallet = this.getUserWallet(sender);
 
     const newTx = await senderWallet.signAndSubmitTransferTx({
@@ -76,6 +77,9 @@ export class AlphClient {
         return Promise.reject(err);
     });
     
+    if (undefined !== txStatus)
+      txStatus.setTransactionId(newTx.txId).displayUpdate();
+
     await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
 
     // Check for consolidation from time to time
@@ -85,7 +89,7 @@ export class AlphClient {
     return newTx.txId;
   }
 
-  async sendAmountToAddressFrom(user: User, amount: string, destinationAddress: string): Promise<string> {
+  async sendAmountToAddressFrom(user: User, amount: string, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
     const userWallet = this.getUserWallet(user);
 
     const attoAlphAmount = convertAlphAmountWithDecimals(amount);
@@ -111,6 +115,9 @@ export class AlphClient {
         return Promise.reject(err);
     });
     
+    if (undefined !== txStatus)
+      txStatus.setTransactionId(newTx.txId).displayUpdate();
+
     await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
 
     // Check for consolidation from time to time
@@ -120,15 +127,17 @@ export class AlphClient {
   }
 
   async consolidateIfRequired(user: User): Promise<string> {
+    console.log(`Checking if consolidation is required for user ${user.id}`);
     const userWallet = this.getUserWallet(user);
-    return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: true })
+    return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: false })
     .then(async (addressBalance) => { 
       if (addressBalance.utxoNum < EnvConfig.bot.nb_utxo_before_consolidation) {
-        console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for this user wallet`);
+        console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for wallet of user id:${user.id}`);
         return;
       }
-      const tx = await this.consolidateUTXO(userWallet)[0]; 
-      console.log(tx);
+      console.log(`Consolidation UTXO for user ${user.id}`);
+      const tx = (await this.consolidateUTXO(userWallet)).join(", ");
+      console.log(`Consolidated in txId ${tx}`);
       return tx;
     })
     .catch((err) => {
@@ -145,11 +154,11 @@ export class AlphClient {
       fromPublicKey: userWallet.publicKey,
       toAddress: userWallet.address,
     })
-    .then(sweepResults =>
+    .then(sweepResults => 
       sweepResults.unsignedTxs.map(tx => userWallet.signAndSubmitUnsignedTx({ signerAddress: userWallet.address, unsignedTx: tx.unsignedTx }))
     )
     .then(promises => Promise.all(promises))
-    .then(txResults => txResults.map(tx => tx.txId))
+    .then(txResults => txResults.map(tx => {console.log(`Transactions: ${tx.txId}`); return tx.txId; } ))
     .catch((err) => {
       if (alphErrorIsNetworkError(err))
         return Promise.reject(new NetworkError(err));
