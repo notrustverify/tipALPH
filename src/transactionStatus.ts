@@ -1,4 +1,4 @@
-import { EnvConfig } from "./config";
+import { EnvConfig } from "./config.js";
 
 class TransactionState {
     readonly stateText: string;
