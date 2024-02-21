@@ -23,8 +23,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    * Utility functions
    */
 
-  const replyTo = (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string) => {
-    ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode: "HTML" });
+  const replyTo = (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
+    const parse_mode = isHTML ? "HTML" : "Markdown";
+    ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview });
   };
 
   const getUserFromTgId = (userId: number): Promise<User> => {
@@ -53,7 +54,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       console.log(`Attempt to register "${user.telegramUsername}" (id: ${user.telegramId})`);
       return alphClient.registerUser(user)
       .then(user => {
-        replyTo(ctx, lastTgMsg, "A new wallet has been initialized!");
+        console.log(`Registered "${user.telegramUsername}" (id: ${user.telegramId})`);
+        let msg = `Your wallet has been initialized!\nHere's your adresse:\n${user.address}\n`;
+        msg += "Ask users to <code>/tip</code> you or send $ALPH to it.\n",
+        msg += "Download the <a href='https://alephium.org/#wallets'>wallets</a>!";
+        replyTo(ctx, lastTgMsg, msg);
         return user;
       })
       .catch((err) => {
