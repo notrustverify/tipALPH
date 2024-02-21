@@ -1,4 +1,4 @@
-import { Number256, convertAlphAmountWithDecimals, prettifyAttoAlphAmount } from "@alephium/web3";
+import { Number256 } from "@alephium/web3";
 import { User } from "./db/user";
 
 export enum ErrorTypes {
@@ -66,9 +66,6 @@ export function alphErrorIsNotEnoughFundsError(err: Error): boolean {
 }
 
 export class NotEnoughFundsError extends AlphAPIError {
-  readonly actualFunds: Number256;
-  readonly requiredFunds: Number256;
-
   constructor(error?: Error) {
     let args = error.message.match(notEnoughFundsRegex);    
     super("not enough funds error", {
@@ -78,7 +75,23 @@ export class NotEnoughFundsError extends AlphAPIError {
         requiredFunds: args[2],
       }
     });
-    this.actualFunds = BigInt(args[1]);
-    this.requiredFunds = BigInt(args[2]);
+  }
+
+  actualFunds(): Number256 {
+    return BigInt(this.context["actualFunds"]);
+  }
+
+  requiredFunds(): Number256 {
+    return BigInt(this.context["requiredFunds"]);
+  }
+}
+
+export class InvalidAddressError extends GeneralError {
+  constructor(invalidAddress: string) {
+    super("invalid adress error", { context: { invalidAddress } });
+  }
+
+  invalidAddress(): string {
+    return this.context["invalidAddress"];
   }
 }

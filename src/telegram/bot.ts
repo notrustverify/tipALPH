@@ -3,7 +3,7 @@ import { Telegraf, Context } from 'telegraf';
 import * as Typegram from '@telegraf/types';
 import { Repository } from 'typeorm';
 
-import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, NetworkError, NotEnoughFundsError } from '../error.js';
+import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughFundsError } from '../error.js';
 import { TransactionStatus } from '../transactionStatus.js';
 import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
@@ -184,7 +184,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         }
         else if (err instanceof NotEnoughFundsError) {
           console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
-          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot sent ${prettifyAttoAlphAmount(err.requiredFunds)} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds)} ALPH`);
+          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot sent ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`);
         }
         else {
           console.error(new GeneralError("failed to tip", {
@@ -241,6 +241,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     .catch((err) => {
       if (err instanceof NetworkError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
+      }
+      else if (err instanceof InvalidAddressError) {
+        ctx.reply(`The provided address (${err.invalidAddress}) seems invalid.`);
+        console.error(genLogMessageErrorWhile("withdrawal", err, sender));
       }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));

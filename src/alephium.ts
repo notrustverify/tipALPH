@@ -1,11 +1,11 @@
+import { NodeProvider, bs58, convertAlphAmountWithDecimals, prettifyAttoAlphAmount } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
-import { NodeProvider, convertAlphAmountWithDecimals, prettifyAttoAlphAmount } from "@alephium/web3";
 import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
 import { EnvConfig, FullNodeConfig } from "./config.js";
-import { ErrorTypes, GeneralError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
+import { ErrorTypes, GeneralError, InvalidAddressError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
 import { User } from "./db/user.js";
 import { TransactionStatus } from "./transactionStatus.js";
 
@@ -90,6 +90,9 @@ export class AlphClient {
   }
 
   async sendAmountToAddressFrom(user: User, amount: string, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
+    if (!isAddressValid(destinationAddress))
+      return Promise.reject(new InvalidAddressError(destinationAddress));
+
     const userWallet = this.getUserWallet(user);
 
     const attoAlphAmount = convertAlphAmountWithDecimals(amount);
@@ -205,3 +208,6 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
 
   return new AlphClient(nodeProvider, mnemonicReader, userStore);
 }
+
+export const isAddressValid = (address: string) =>
+  !!address && /^[1-9A-HJ-NP-Za-km-z]+$/.test(address) && bs58.decode(address).slice(1).length >= 32
