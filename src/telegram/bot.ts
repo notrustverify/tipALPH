@@ -23,9 +23,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    * Utility functions
    */
 
-  const replyTo = (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
+  const replyTo = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
     const parse_mode = isHTML ? "HTML" : "Markdown";
-    ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview });
+    await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview }).catch(console.error);
   };
 
   const getUserFromTgId = (userId: number): Promise<User> => {
@@ -45,7 +45,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     const userId = ctx.message.from.id;
 
     // Initial message
-    await ctx.reply(`Hi ${username}!`);
+    let msg = `Hi ${username}!\n\n`;
+    msg += `Using @${ctx.me}, you can tip ALPH to other telegram users!\n`;
+    msg += "Please bear in mind that:\n";
+    msg += " - the bot is still in alpha\n";
+    msg += " - the wallet linked to your account is custodial (we hold the mnemonic) so please do not put too much money on it";
+    await ctx.reply(msg);
 
     // Creation of wallet
     let user = new User(userId, username);
@@ -91,9 +96,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const sendAddressMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
     const link = undefined !== EnvConfig.explorerAddress() ? `its status <a href="${EnvConfig.explorerAddress()}/addresses/${user.address}">here</a> and ` : "";
-    console.log(link);
-    console.log(`Your address is ${user.address}.\nYou can see ${link}your balance with /balance.`);
-    ctx.replyWithHTML(`Your address is ${user.address}.\nYou can see ${link}your balance with /balance.`);
+    ctx.replyWithHTML(`Your address is <code>${user.address}</code>.\nYou can see ${link}your balance with /balance.`);
   };
   
   const sendBalanceMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
@@ -135,7 +138,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
-    const tipAmountRegex = /^\d+(?:[.,]\d+)?$/;
+    const tipAmountRegex = /^\d+(?:[.,]\d+)?/;
 
     // These are the values that we are trying to determine
     let receiverTgId: number;
@@ -159,7 +162,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
-    const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`);
+    const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`, amountAsString);
     let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
     txStatus.setDisplayUpdate((update: string) => replyTo(ctx, previousReply, update));
 
@@ -229,7 +232,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     // As AlphClient only allow for . as delimiter
     amountAsString = amountAsString.replace(",", ".");
 
-    const txStatus = new TransactionStatus(`Withdrawal of ${amountAsString} ALPH`);
+    const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, amountAsString);
     let lastMsg = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
     txStatus.setDisplayUpdate((update: string) => replyTo(ctx, lastMsg, update));
 

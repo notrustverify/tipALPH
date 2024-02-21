@@ -77,7 +77,7 @@ export class AlphClient {
         return Promise.reject(err);
     });
     
-    if (undefined !== txStatus)
+    if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
     await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
@@ -118,7 +118,7 @@ export class AlphClient {
         return Promise.reject(err);
     });
     
-    if (undefined !== txStatus)
+    if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
     await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);

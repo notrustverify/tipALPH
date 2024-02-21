@@ -1,34 +1,23 @@
 import { EnvConfig } from "./config.js";
 
-class TransactionState {
-    readonly stateText: string;
-    readonly stateEmoji: string;
-
-    constructor(text: string, emoji: string) {
-        this.stateText = text;
-        this.stateEmoji = emoji;
-    }
-
-    toString(): string {
-        return `${this.stateEmoji} ${this.stateText}`;
-    }
+enum TransactionState {
+    PENDING = "&#8987;",
+    CONFIRMED = "&#9989;",
+    FAILED = "&#10060;"
 }
-
-const TransactionStatePending = new TransactionState("pending", "&#8987;");
-const TransactionStateConfirmed = new TransactionState("confirmed", "&#9989;");
-const TransactionStateFailed = new TransactionState("failed", "&#10060;");
-export { TransactionStatePending, TransactionStateConfirmed, TransactionStateFailed }
 
 type DisplayFunction = (a: string) => void;
 
 export class TransactionStatus{
     private readonly baseMsg: string;
+    private readonly amount: string;
     private txId: string;
     private state: TransactionState;
     private htmlDisplayer: DisplayFunction;
 
-    constructor(baseMsg: string, htmlDisplayer?: DisplayFunction, currentState: TransactionState = TransactionStatePending) {
+    constructor(baseMsg: string, amount: string, htmlDisplayer?: DisplayFunction, currentState: TransactionState = TransactionState.PENDING) {
         this.baseMsg = baseMsg;
+        this.amount = amount;
         this.state = currentState;
         this.htmlDisplayer = htmlDisplayer;
     }
@@ -39,17 +28,17 @@ export class TransactionStatus{
     }
 
     setPending(): TransactionStatus {
-        this.state = TransactionStatePending;
+        this.state = TransactionState.PENDING;
         return this;
     }
 
     setConfirmed(): TransactionStatus {
-        this.state = TransactionStateConfirmed;
+        this.state = TransactionState.CONFIRMED;
         return this;
     }
 
     setFailed(): TransactionStatus {
-        this.state = TransactionStateFailed;
+        this.state = TransactionState.FAILED;
         return this;
     }
 
@@ -66,7 +55,7 @@ export class TransactionStatus{
     }
 
     private genUpdateMsg(): string {
-        return `${this.baseMsg}\n<b>Status</b>: ${this.state}${this.genTxIdText()}`;
+        return `${this.baseMsg}\n${this.amount} ALPH ${this.state}${this.genTxIdText()}`;
     }
 
     displayUpdate() {

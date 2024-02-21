@@ -43,6 +43,7 @@ export const EnvConfig = {
         return undefined;
     }
   },
+  isOnDevNet: () => "devnet" === EnvConfig.network,
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
     address: process.env.OPERATOR_WALLET_ADDRESS as string,
