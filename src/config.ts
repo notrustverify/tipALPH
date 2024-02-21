@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { existsSync, readFileSync } from 'fs';
 
-config({ path: ['.env', "./data/.env"] });
+config({ path: ['.env'] });
 const MNEMONIC_FILE = "bot_mnemonic.txt";
 const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 

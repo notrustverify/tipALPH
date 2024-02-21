@@ -5,6 +5,7 @@ services:
     image: tipalph:latest
     restart: "always"
     volumes:
+      - .env:/usr/app/.env:ro
       - ./data:/usr/app/data
     secrets:
       - source: bot_mnemonic.txt
