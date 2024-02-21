@@ -147,6 +147,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
+    // As AlphClient only allow for . as delimiter
+    amountAsString = amountAsString.replace(",", ".");
+
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
     const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`);
@@ -215,6 +218,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       ctx.reply("Wrong withdrawal format, sorry.");
       return;
     }
+
+    // As AlphClient only allow for . as delimiter
+    amountAsString = amountAsString.replace(",", ".");
 
     const txStatus = new TransactionStatus(`Withdrawal of ${amountAsString} ALPH`);
     let lastMsg = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
