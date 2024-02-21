@@ -55,8 +55,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return alphClient.registerUser(user)
       .then(user => {
         console.log(`Registered "${user.telegramUsername}" (id: ${user.telegramId})`);
-        let msg = `Your wallet has been initialized!\nHere's your adresse:\n${user.address}\n`;
-        msg += "Ask users to <code>/tip</code> you or send $ALPH to it.\n",
+        let msg = `Your wallet has been initialized!\nHere's your adresse:\n<code>${user.address}</code>\n`;
+        msg += "Ask users to <code>/tip</code> you or send ALPH to it.\n",
         msg += "Download the <a href='https://alephium.org/#wallets'>wallets</a>!";
         replyTo(ctx, lastTgMsg, msg);
         return user;
@@ -90,8 +90,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   };
 
   const sendAddressMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
-    const link = undefined !== EnvConfig.explorerAddress() ? `its status <a href="https://${EnvConfig.explorerAddress()}.alephium.org/addresses/${user.address}">here</a> and ` : "";
-    ctx.replyWithHTML(`Your address is ${user.address}.\nYou can see ${link} your balance with /balance.`);
+    const link = undefined !== EnvConfig.explorerAddress() ? `its status <a href="${EnvConfig.explorerAddress()}/addresses/${user.address}">here</a> and ` : "";
+    console.log(link);
+    console.log(`Your address is ${user.address}.\nYou can see ${link}your balance with /balance.`);
+    ctx.replyWithHTML(`Your address is ${user.address}.\nYou can see ${link}your balance with /balance.`);
   };
   
   const sendBalanceMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
@@ -158,7 +160,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
     const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`);
-    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id } );
+    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
     txStatus.setDisplayUpdate((update: string) => replyTo(ctx, previousReply, update));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -184,7 +186,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         }
         else if (err instanceof NotEnoughFundsError) {
           console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
-          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot sent ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`);
+          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot send ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`);
         }
         else {
           console.error(new GeneralError("failed to tip", {
@@ -248,6 +250,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
+        ctx.reply(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_to_message_id: ctx.message.message_id });
       }
       else {
         console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
@@ -282,7 +285,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const helpFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("help");
-    let helpMessage = "Here is the list of things that I can do:\n\n";
+    let helpMessage = "Here is the list of commands that I handle:\n\n";
     helpMessage += commands.map(c => c.getHelpMessage()).join("\n");
     ctx.reply(helpMessage);
   };
