@@ -4,25 +4,28 @@ import { Context } from 'telegraf';
 export class Command {
     readonly name: string;
     readonly description: string;
-    readonly usageStr?: string;
+    readonly usage: string;
     readonly process: (ctx: Context<Typegram.Update.MessageUpdate>) => any;
 
-    constructor(name: string, description: string, process: (ctx: Context<Typegram.Update.MessageUpdate>) => any, usage?: string) {
+    // If usageWithCommand is provided, should end in `
+    constructor(name: string, description: string, process: (ctx: Context<Typegram.Update.MessageUpdate>) => any, usageWithoutCommand?: string) {
         this.name = name;
         this.description = description;
-        this.usageStr = usage;
         this.process = process;
-    }
 
-    isValid(invocation: string): boolean {
-        return true;
-    }
-
-    usage(): string {
-        return `/${this.name} ${this.usageStr}`;
+        this.usage = "`/" + name;
+        if (undefined !== usageWithoutCommand) {
+            if (usageWithoutCommand.startsWith("`")) {
+                usageWithoutCommand = usageWithoutCommand.substring(1);
+            }
+            this.usage += " " + usageWithoutCommand;
+        }
+        else {
+            this.usage += "`";
+        }
     }
 
     getHelpMessage(): string {
-        return `/${this.name} ${this.description}`;
+        return this.usage + ` _${this.description}_`;
     }
 }

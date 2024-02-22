@@ -1,4 +1,4 @@
-import { AppDataSource } from "./db/data-source.js";  //!\ This import needs to be the first one!
+import { AppDataSource, initializationDBMutex } from "./db/data-source.js";  //!\ This import needs to be the first one!
 import { runTelegram } from "./telegram/bot.js";
 import { createAlphClient } from "./alephium.js";
 import { User } from "./db/user.js";
@@ -12,12 +12,8 @@ console.log(`Proceeding in the ${EnvConfig.network}`);
 
 const userRepository = AppDataSource.getRepository(User);
 
-// TODO: Ensure that we have at least 4 addresses for collecting withdrawal fees
-
-createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode)
-  .then(alphClient => {
-    runTelegram(alphClient, userRepository);
-  })
-  .catch(err => {
-    console.error("Failed to start:", err);
-  });
+initializationDBMutex.waitForUnlock()
+.then(async () => {
+  const alphClient = await createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode);
+  runTelegram(alphClient, userRepository);
+}).catch(err => console.error("Failed to start:", err))

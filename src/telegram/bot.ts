@@ -12,6 +12,11 @@ import { User } from '../db/user.js';
 
 let bot: Telegraf;
 
+export const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
+  const parse_mode = isHTML ? "HTML" : "Markdown";
+  await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview }).catch(console.error);
+};
+
 export async function runTelegram(alphClient: AlphClient, userRepository: Repository<User>) {
   console.log("Starting Telegram bot...");
   
@@ -22,11 +27,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   /**
    * Utility functions
    */
-
-  const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
-    const parse_mode = isHTML ? "HTML" : "Markdown";
-    await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview }).catch(console.error);
-  };
 
   const getUserFromTgId = (userId: number): Promise<User> => {
     return userRepository.findOneBy({ telegramId: userId });
@@ -46,7 +46,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     // Initial message
     let msg = `Hi ${username}!\n\n`;
-    msg += `Using @${ctx.me}, you can tip ALPH to other telegram users!\n`;
+    msg += `With @${ctx.me}, you can tip ALPH to other telegram users!\n`;
     msg += "Please bear in mind that:\n";
     msg += " - the bot is still in alpha\n";
     msg += " - the wallet linked to your account is custodial (we hold the mnemonic) so please do not put too much money on it";
@@ -293,7 +293,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log("help");
     let helpMessage = "Here is the list of commands that I handle:\n\n";
     helpMessage += commands.map(c => c.getHelpMessage()).join("\n");
-    ctx.reply(helpMessage);
+    ctx.reply(helpMessage, {parse_mode: "Markdown"});
   };
 
   /**
@@ -347,14 +347,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    */
 
   commands = [
-    new Command("start", "Initialize your account with the bot", startFct),
-    new Command("address", "Display the address of your account", addressFct),
-    new Command("balance", "Display the balance of your account", balanceFct),
-    new Command("tip", "Allow you to tip other users", tipFct),
-    new Command("withdraw", "Sends a given amount to a given address (bot takes fees!)", withdrawFct),
-    new Command("privacy", "Display the data protection policy of the bot", privacyFct),
-    new Command("forgetme", "Ask the bot to forget about you", forgetmeFct),
-    new Command("help", "Display the help message of the bot", helpFct),
+    new Command("start", "initialize your account with the bot", startFct),
+    new Command("address", "display the address of your account", addressFct),
+    new Command("balance", "display the balance of your account", balanceFct),
+    new Command("tip", "in response of a message to tip amount to its owner", tipFct, "`<amount>`"),
+    new Command("withdraw", "sends amount to the ALPH address (bot takes fees!)", withdrawFct, "`<amount> <ALPH_address>`"),
+    new Command("privacy", "display the data protection policy of the bot", privacyFct),
+    new Command("forgetme", "ask the bot to forget about you", forgetmeFct),
+    new Command("help", "display help", helpFct),
   ];
 
   for (let cmd of commands)
