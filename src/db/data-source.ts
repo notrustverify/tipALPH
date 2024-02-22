@@ -1,7 +1,12 @@
-import "reflect-metadata" // Required by Typeorm
-import { DataSource } from "typeorm"
+import { DataSource } from "typeorm";
+import { Mutex } from "async-mutex";
+import "reflect-metadata"; // Required by Typeorm
+
 import { EnvConfig } from "../config.js";
 import { User } from "./user.js";
+
+export const initializationDBMutex = new Mutex();
+initializationDBMutex.acquire();
 
 export const AppDataSource = new DataSource({
     type: "sqlite",
@@ -21,4 +26,7 @@ AppDataSource.initialize()
   })
   .catch((error) => {
     throw new Error(`failed to initialize connection to the database: ${error}`);
+  })
+  .finally(() => {
+    initializationDBMutex.release();
   });

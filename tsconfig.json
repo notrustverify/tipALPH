@@ -17,10 +17,8 @@
     "skipLibCheck": true,
     //"strictNullChecks": true
   },
-  "exclude": [
-    "node_modules",
-    "build",
-    "tests"
+  "include": [
+    "src",
   ],
   "ts-node": {
     "transpileOnly": true,

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from "typeorm"
+import { Entity, PrimaryGeneratedColumn, Column, Unique, Repository } from "typeorm"
 
 @Entity()
 @Unique(["id", "telegramId", "telegramUsername"])
@@ -30,4 +30,8 @@ export class User {
   toJSON(): string {
     return JSON.stringify(this);
   }
+}
+
+export const getUserFromTgId = (userRepository: Repository<User>, userId: number): Promise<User> => {
+  return userRepository.findOneBy({ telegramId: userId });
 }
