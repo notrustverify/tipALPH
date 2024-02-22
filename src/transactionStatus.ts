@@ -58,9 +58,9 @@ export class TransactionStatus{
         return `${this.baseMsg}\n${this.amount} ALPH ${this.state}${this.genTxIdText()}`;
     }
 
-    displayUpdate() {
+    async displayUpdate() {
         if (undefined !== this.htmlDisplayer)
-            this.htmlDisplayer(this.genUpdateMsg());
+            return await Promise.resolve(this.htmlDisplayer(this.genUpdateMsg()));
     }
 
     toString(): string {

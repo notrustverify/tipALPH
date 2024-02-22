@@ -23,7 +23,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    * Utility functions
    */
 
-  const replyTo = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
+  const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
     const parse_mode = isHTML ? "HTML" : "Markdown";
     await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview }).catch(console.error);
   };
@@ -63,7 +63,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         let msg = `Your wallet has been initialized!\nHere's your adresse:\n<code>${user.address}</code>\n`;
         msg += "Ask users to <code>/tip</code> you or send ALPH to it.\n",
         msg += "Download the <a href='https://alephium.org/#wallets'>wallets</a>!";
-        replyTo(ctx, lastTgMsg, msg);
+        editLastMsgWith(ctx, lastTgMsg, msg);
         return user;
       })
       .catch((err) => {
@@ -71,7 +71,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
           console.error(genLogMessageErrorWhile("initilize wallet (UN-EXPECTED)", err, user));
           return null;
         }
-        replyTo(ctx, lastTgMsg, "You already have an initialized account!");
+        editLastMsgWith(ctx, lastTgMsg, "You already have an initialized account!");
         return getUserFromTgId(userId);
       });
     });
@@ -113,13 +113,13 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
-    return getUserFromTgId(ctx.message.from.id).then(user => {
-      if (null === user) {
-        ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
-        return;
-      }
-      sendBalanceMessage(ctx, user);
-    });
+    const user = await getUserFromTgId(ctx.message.from.id);
+    if (null === user) {
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
+      return;
+    }
+    
+    sendBalanceMessage(ctx, user);
   };
   
   const tipFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
@@ -138,7 +138,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
-    const tipAmountRegex = /^\d+(?:[.,]\d+)?/;
+    const tipAmountRegex = /^\d+(?:[.,]\d*)?$/;
 
     // These are the values that we are trying to determine
     let receiverTgId: number;
@@ -146,7 +146,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let amountAsString: string;
 
     let args: RegExpMatchArray;
+    args = payload.match(tipAmountRegex);
+    console.log(args);
     if (isReply && (args = payload.match(tipAmountRegex)) && 1 == args.length) {
+      console.log(args.length);
       receiverTgId = ctx.message.reply_to_message.from.id;
       receiverTgUsername = ctx.message.reply_to_message.from.username;
       amountAsString = args[0];
@@ -164,7 +167,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`, amountAsString);
     let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
-    txStatus.setDisplayUpdate((update: string) => replyTo(ctx, previousReply, update));
+    txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
     getUserFromTgId(receiverTgId).then(tipReceiver => {
@@ -234,7 +237,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, amountAsString);
     let lastMsg = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
-    txStatus.setDisplayUpdate((update: string) => replyTo(ctx, lastMsg, update));
+    txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
 
     console.log(`${sender.telegramId} sends ${amountAsString} ALPH to ${destinationAddress}`);
 
