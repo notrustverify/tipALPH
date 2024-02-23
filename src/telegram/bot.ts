@@ -390,14 +390,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   });
 
   /**
-   * Might help to get replies in supergroup to set the bot name?
-   * https://github.com/telegraf/telegraf/issues/437
-   */
-  bot.telegram.getMe().then((botInfo) => {
-    bot.options.username = botInfo.username; 
-  });
-
-  /**
    * Linking of functions with commands
    */
 
