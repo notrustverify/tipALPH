@@ -49,7 +49,10 @@ export const EnvConfig = {
     address: process.env.OPERATOR_WALLET_ADDRESS as string,
   },
   bot: {
-    nb_utxo_before_consolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
+    nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
+    nbConfirmationsInternalTransfer: Number(process.env.NUM_CONFIRMATIONS_INTERNAL_TRANSFER as string || "1"),
+    nbConfirmationsExternalTransfer: Number(process.env.NUM_CONFIRMATIONS_EXTERNAL_TRANSFER as string || "1"),
+    onlyAllowAdmins: "true" === process.env.ONLY_ALLOW_ADMIN.toLowerCase() || false,
   }
 } as const;
 

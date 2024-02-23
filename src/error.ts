@@ -69,11 +69,7 @@ export class NotEnoughFundsError extends AlphAPIError {
   constructor(error?: Error) {
     let args = error.message.match(notEnoughFundsRegex);    
     super("not enough funds error", {
-      error,
-      context: {
-        actualFunds: args[1],
-        requiredFunds: args[2],
-      }
+      error, context: { actualFunds: args[1], requiredFunds: args[2] }
     });
   }
 

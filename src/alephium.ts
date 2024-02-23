@@ -80,7 +80,7 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
+    await waitTxConfirmed(this.nodeProvider, newTx.txId, EnvConfig.bot.nbConfirmationsInternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(sender).catch(console.error);
@@ -121,7 +121,7 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await waitTxConfirmed(this.nodeProvider, newTx.txId, 1, 1000);
+    await waitTxConfirmed(this.nodeProvider, newTx.txId, EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(user).catch(console.error);
@@ -134,7 +134,7 @@ export class AlphClient {
     const userWallet = this.getUserWallet(user);
     return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: false })
     .then(async (addressBalance) => { 
-      if (addressBalance.utxoNum < EnvConfig.bot.nb_utxo_before_consolidation) {
+      if (addressBalance.utxoNum < EnvConfig.bot.nbUTXOBeforeConsolidation) {
         console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for wallet of user id:${user.id}`);
         return;
       }

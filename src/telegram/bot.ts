@@ -144,6 +144,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let receiverTgId: number;
     let receiverTgUsername: string;
     let amountAsString: string;
+    let msgToReplyTo = ctx.message.message_id;
 
     let args: RegExpMatchArray;
     args = payload.match(tipAmountRegex);
@@ -153,6 +154,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       receiverTgId = ctx.message.reply_to_message.from.id;
       receiverTgUsername = ctx.message.reply_to_message.from.username;
       amountAsString = args[0];
+      msgToReplyTo = ctx.message.reply_to_message.message_id;
     }
     else {
       console.log(`Got: "${payload}", resulting in ${args}`);
@@ -166,7 +168,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
 
     const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`, amountAsString);
-    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
+    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: msgToReplyTo });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -216,7 +218,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/withdraw@${ctx.me}`, "").replace("/withdraw", "").trim();
-    const sendAmountDestRegex = /^(\d+(?:[.,]\d+)?) ([a-zA-Z0-9]{45})$/;
+    const sendAmountDestRegex = /^(\d+(?:[.,]\d+)?) ([a-zA-Z0-9]+)$/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -310,29 +312,30 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   // Middleware filters out messages that are not text
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if (ctx.message !== undefined && 'text' in ctx.message) {
+    if ("message" in ctx && 'text' in ctx.message)
       await next();
-    }
   });
 
-  bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if (!ctx.message.from.is_bot) {
-      await next();
-    }
-  });
-
-  // This middleware allows to restrict to Admin UIDs and prevent Bots from exchanging message to prepare overruling the world
+  // This middleware to restrict to Admin UIDs, if desired
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
     const adminUIDs = EnvConfig.telegram.admin.users;
-    const isAdmin: boolean = (ctx.update["message"] && adminUIDs.includes(ctx.update["message"]["from"]["id"])) || (ctx.update["edited_message"] && adminUIDs.includes(ctx.update["edited_message"]["from"]["id"]))
-    if (!ctx.from)
-      throw new Error("from field is not present in the update")
-    if (!ctx.from.is_bot && process.env.TG_ADMIN_UIDS && isAdmin) {
+    console.log(EnvConfig.bot.onlyAllowAdmins);
+    if (!EnvConfig.bot.onlyAllowAdmins || 0 === adminUIDs.length) { // If no admin is specified, we allow everyone
       await next();
     }
     else {
-      console.log(`${ctx.update["message"]["from"]["id"]} wants to join!`);
+      const isAdmin: boolean = ("message" in ctx.update && adminUIDs.includes(ctx.update.message.from.id));// || ("edited_message" in ctx.update && adminUIDs.includes(ctx.update["edited_message"]["from"]["id"]))
+      if (process.env.TG_ADMIN_UIDS && isAdmin)
+        await next();
+      else  // If whitelist but user attempts to use anyway, we display its id, to be added
+        console.log(`"${ctx.message.from.username}" (id: ${ctx.message.from.id}) wants to join!`);
     }
+  });
+
+  // Prevent Bots from exchanging messages to prepare overruling the world
+  bot.use(async (ctx: Context<Typegram.Update>, next) => {
+    if ("from" in ctx && !ctx.from.is_bot)
+      await next();
   });
 
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
@@ -350,8 +353,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("start", "initialize your account with the bot", startFct),
     new Command("address", "display the address of your account", addressFct),
     new Command("balance", "display the balance of your account", balanceFct),
-    new Command("tip", "in response of a message to tip amount to its owner", tipFct, "`<amount>`"),
-    new Command("withdraw", "sends amount to the ALPH address (bot takes fees!)", withdrawFct, "`<amount> <ALPH_address>`"),
+    new Command("tip", "in response of a message tip amount to its owner", tipFct, "`<amount>`"),
+    new Command("withdraw", "send amount to the ALPH address (bot takes fees!)", withdrawFct, "`<amount> <ALPH_address>`"),
     new Command("privacy", "display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "ask the bot to forget about you", forgetmeFct),
     new Command("help", "display help", helpFct),
