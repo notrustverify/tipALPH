@@ -133,8 +133,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
-
-    // Determine who is the receiver from the message type and reply
     const isReply = "reply_to_message" in ctx.message && undefined !== ctx.message.reply_to_message;
 
     const messageText = ctx.message.text as string;
@@ -151,7 +149,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     let args: RegExpMatchArray;
     console.log(`Payload: "${payload}"`);
-    console.log("isReply?", isReply);
+    console.log("isReply?", "reply_to_message" in ctx.message, undefined !== ctx.message.reply_to_message, "=>", isReply);
+    console.log(ctx.message);
     console.log(payload.match(tipAmountUserRegex));
     console.log(payload.match(tipAmountRegex));
     if (!isReply && (args = payload.match(tipAmountUserRegex)) && (3 >= args.length || 4 <= args.length)) {
@@ -176,6 +175,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         else
           motive = args[2];
       }
+      msgToReplyTo = ctx.message.reply_to_message.message_id;
 
       receiver = await getUserFromTgId(ctx.message.reply_to_message.from.id);
       if (null === receiver) {
@@ -195,8 +195,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
           return;
         }
       }
-
-      msgToReplyTo = ctx.message.reply_to_message.message_id;
     }
     else {
       ctx.reply(usageTip, { parse_mode: "Markdown" });
@@ -209,7 +207,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log(`${sender.telegramId} tips ${amountAsString} ALPH to ${receiver.telegramId} (Motive: "${motive}")`);
 
     const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, amountAsString);
-    let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: msgToReplyTo });
+    console.log("msgToReplyTo: ", msgToReplyTo);
+    const setResponseTo = undefined !== msgToReplyTo ? { reply_to_message_id: msgToReplyTo } : {};
+    let previousReply = await ctx.replyWithHTML(txStatus.toString(), setResponseTo);
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -228,7 +228,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
       if (!isReply && ctx.botInfo.id != receiver.telegramId)
-        ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from @${sender.telegramUsername}${txStatus.genTxIdText()}`);
+        ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from @${sender.telegramUsername}${txStatus.genTxIdText()}`, {parse_mode: "HTML"});
     })
     .catch((err) => {
       if (err instanceof NetworkError) {
