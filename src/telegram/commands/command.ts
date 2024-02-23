@@ -4,7 +4,7 @@ import { Context } from 'telegraf';
 export class Command {
     readonly name: string;
     readonly description: string;
-    readonly usages: string[];
+    readonly usage: string;
     readonly process: (ctx: Context<Typegram.Update.MessageUpdate>) => any;
 
     // If usageWithoutCommand is provided, should end in `

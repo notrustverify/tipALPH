@@ -188,7 +188,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         }
         catch (err) {
           console.error(new GeneralError("failed to register new user while tipping", {
-            err,
+            error: err,
             context: { newUser, sender, amountAsString }
           }))
           ctx.reply(`An error occured while creating a new wallet for ${newUser.telegramUsername}`);
