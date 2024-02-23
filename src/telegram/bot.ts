@@ -88,7 +88,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   const addressFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
     sendAddressMessage(ctx, user);
@@ -115,7 +115,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
     
@@ -124,15 +124,15 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   
   const usageTip = "To tip @user 1 ALPH, either:\n - tag it: `/tip 1 @user`\n - reply to one of user's message with: `/tip 1`\nYou can also add a reason in the end of each command.";
   const tipFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-
+    if (!("text" in ctx.message))
+      return;
+    
     const sender = await getUserFromTgId(ctx.message.from.id);
     if (null === sender) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
 
-    if (!("text" in ctx.message))
-      return;
 
     // Determine who is the receiver from the message type and reply
     const isReply = "reply_to_message" in ctx.message && undefined !== ctx.message.reply_to_message;
@@ -147,6 +147,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let amountAsString: string;
     let msgToReplyTo: number;
     let motive: string;
+    let wasNewAccountCreated = false;
 
     let args: RegExpMatchArray;
     console.log(`Payload: "${payload}"`);
@@ -157,8 +158,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       amountAsString = args[1];
       receiver = await getUserFromTgUsername(args[2]);
       if (null === receiver) {
-        console.log("User does not exists, should create an account");
-        ctx.reply("This user currently does not have a wallet..");
+        console.log("User does not exist. Cannot create an account.");
+        ctx.reply("This user hasn't initialized their wallet yet.. You can initialize a wallet for this user by tipping in response.");
         return;
       }
       if (4 === args.length && undefined !== args[3])
@@ -175,12 +176,26 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         else
           motive = args[2];
       }
+
       receiver = await getUserFromTgId(ctx.message.reply_to_message.from.id);
       if (null === receiver) {
-        console.log("User does not exists, should create an account");
-        ctx.reply("This user currently does not have a wallet..");
-        return;
+        console.log("User does not exists, attempt creating an account");
+        const newUser = new User(ctx.message.reply_to_message.from.id, ctx.message.reply_to_message.from.username);
+        try {
+          receiver = await alphClient.registerUser(newUser);
+          wasNewAccountCreated = true;
+          console.log(`"${sender.telegramUsername}" (id: ${sender.telegramId}) created a wallet for "${receiver.telegramUsername}" (id: ${receiver.telegramId}) by tipping!`);
+        }
+        catch (err) {
+          console.error(new GeneralError("failed to register new user while tipping", {
+            err,
+            context: { newUser, sender, amountAsString }
+          }))
+          ctx.reply(`An error occured while creating a new wallet for ${newUser.telegramUsername}`);
+          return;
+        }
       }
+
       msgToReplyTo = ctx.message.reply_to_message.message_id;
     }
     else {
@@ -208,6 +223,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       if (ctx.botInfo.id != receiver.telegramId)
         ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from ${sender.telegramUsername}`);
       */
+      if (wasNewAccountCreated)
+        ctx.reply(`@${receiver.telegramUsername}!` + " You received a tip! Send `/start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
+
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
       if (!isReply && ctx.botInfo.id != receiver.telegramId)
         ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from @${sender.telegramUsername}${txStatus.genTxIdText()}`);
@@ -239,6 +257,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log("withdraw");
 
     const sender = await getUserFromTgId(ctx.message.from.id);
+    if (null === sender) {
+      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
+      return;
+    }
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/withdraw@${ctx.me}`, "").replace("/withdraw", "").trim();

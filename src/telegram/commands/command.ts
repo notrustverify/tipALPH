@@ -16,6 +16,6 @@ export class Command {
     }
 
     getHelpMessage(): string {
-        return "`" + this.name + "`" + ` _${this.description}_`;
+        return "`/" + this.name + "`" + ` _${this.description}_`;
     }
 }

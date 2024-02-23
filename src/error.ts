@@ -3,7 +3,7 @@ import { User } from "./db/user";
 
 export enum ErrorTypes {
     NOT_ENOUGH_MONEY = "not enough money",
-    UN_INITIALIZED_WALLET = "It seems that you haven't initialized your wallet yet. Send /start to do it!",
+    UN_INITIALIZED_WALLET = "It seems that you haven't initialized your wallet yet. Send me `/start` in DM to do it!",
     USER_ALREADY_REGISTERED = "user already registered",
 }
 
