@@ -47,7 +47,7 @@ export class TransactionStatus{
         return this;
     }
 
-    private genTxIdText(): string {
+    genTxIdText(): string {
         let txIdText = "";
         if (undefined !== EnvConfig.explorerAddress() && undefined !== this.txId)
             txIdText = ` (<a href="${EnvConfig.explorerAddress()}/transactions/${this.txId}">tx</a>)`;

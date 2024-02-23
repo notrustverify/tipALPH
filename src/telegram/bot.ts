@@ -28,10 +28,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    * Utility functions
    */
 
-  const getUserFromTgId = (userId: number): Promise<User> => {
-    return userRepository.findOneBy({ telegramId: userId });
-  }
+  const getUserFromTgId = (telegramId: number): Promise<User> => userRepository.findOneBy({ telegramId });
 
+  const getUserFromTgUsername = (telegramUsername: string): Promise<User> => userRepository.findOneBy({ telegramUsername });
+  
   /**
    * Command functions
    */
@@ -122,10 +122,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     sendBalanceMessage(ctx, user);
   };
   
+  const usageTip = "To tip @user 1 ALPH, either:\n - tag it: `/tip 1 @user`\n - reply to one of user's message with: `/tip 1`\nYou can also add a reason in the end of each command.";
   const tipFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
 
-    const tipSender = await getUserFromTgId(ctx.message.from.id);
-    if (null === tipSender) {
+    const sender = await getUserFromTgId(ctx.message.from.id);
+    if (null === sender) {
       ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET);
       return;
     }
@@ -138,76 +139,99 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.replace(`/tip@${ctx.me}`, "").replace("/tip", "").trim();
-    const tipAmountRegex = /^\d+(?:[.,]\d*)?$/;
+    const tipAmountUserRegex = /^(\d+(?:[.,]\d+)?)\s+@([a-zA-Z0-9_]{4,32})(?:\s+(.*))?/;
+    const tipAmountRegex = /^(\d+(?:[.,]\d+)?)(?:\s+(.*))?/;
 
     // These are the values that we are trying to determine
-    let receiverTgId: number;
-    let receiverTgUsername: string;
+    let receiver: User
     let amountAsString: string;
-    let msgToReplyTo = ctx.message.message_id;
+    let msgToReplyTo: number;
+    let motive: string;
 
     let args: RegExpMatchArray;
-    args = payload.match(tipAmountRegex);
-    console.log(args);
-    if (isReply && (args = payload.match(tipAmountRegex)) && 1 == args.length) {
-      console.log(args.length);
-      receiverTgId = ctx.message.reply_to_message.from.id;
-      receiverTgUsername = ctx.message.reply_to_message.from.username;
-      amountAsString = args[0];
+    console.log(`Payload: "${payload}"`);
+    console.log("isReply?", isReply);
+    console.log(payload.match(tipAmountUserRegex));
+    console.log(payload.match(tipAmountRegex));
+    if (!isReply && (args = payload.match(tipAmountUserRegex)) && (3 >= args.length || 4 <= args.length)) {
+      amountAsString = args[1];
+      receiver = await getUserFromTgUsername(args[2]);
+      if (null === receiver) {
+        console.log("User does not exists, should create an account");
+        ctx.reply("This user currently does not have a wallet..");
+        return;
+      }
+      if (4 === args.length && undefined !== args[3])
+        motive = args[3];
+    }
+    else if (isReply && (args = payload.match(tipAmountRegex)) && (2 >= args.length || 3 <= args.length)) {
+      amountAsString = args[1];
+      if (3 === args.length && undefined !== args[2]) {
+        if (args[2].startsWith("@")) { // If a user is tipped, we remove it from the motive (or do not consider the motive)
+          let endOfUserTag: number;
+          if ((endOfUserTag = args[2].indexOf(" ")) > 0)
+            motive = args[2].substring(endOfUserTag).trim();
+        }
+        else
+          motive = args[2];
+      }
+      receiver = await getUserFromTgId(ctx.message.reply_to_message.from.id);
+      if (null === receiver) {
+        console.log("User does not exists, should create an account");
+        ctx.reply("This user currently does not have a wallet..");
+        return;
+      }
       msgToReplyTo = ctx.message.reply_to_message.message_id;
     }
     else {
-      console.log(`Got: "${payload}", resulting in ${args}`);
-      ctx.reply("Wrong tipping format, sorry.");
+      ctx.reply(usageTip, { parse_mode: "Markdown" });
       return;
     }
 
     // As AlphClient only allow for . as delimiter
     amountAsString = amountAsString.replace(",", ".");
 
-    console.log(`${tipSender.telegramId} tips ${amountAsString} ALPH to ${receiverTgId}`);
+    console.log(`${sender.telegramId} tips ${amountAsString} ALPH to ${receiver.telegramId} (Motive: "${motive}")`);
 
-    const txStatus = new TransactionStatus(`@${tipSender.telegramUsername} tipped @${receiverTgUsername}`, amountAsString);
+    const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, amountAsString);
     let previousReply = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: msgToReplyTo });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
-    getUserFromTgId(receiverTgId).then(tipReceiver => {
-      if (null === tipReceiver) {
-        ctx.reply("This user has no wallet yet.");  // TODO: should handle this case in the future
-        return;
+    alphClient.transferFromUserToUser(sender, receiver, amountAsString, txStatus)
+    .then(txId => {
+      txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
+      /*  // If we want to warn users about ins and outs
+      if ("private" !== ctx.chat.type) {
+        ctx.telegram.sendMessage(sender.telegramId, `You successfully tipped ${amountAsString} ALPH to ${receiver.telegramUsername}`);
       }
-      alphClient.transferFromUserToUser(tipSender, tipReceiver, amountAsString, txStatus)
-      .then(txId => {
-        txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
-        /*  // If we want to warn users about ins and outs
-        if ("private" !== ctx.chat.type) {
-          ctx.telegram.sendMessage(tipSender.telegramId, `You successfully tipped ${amountAsString} ALPH to ${tipReceiver.telegramUsername}`);
-        }
-        if (ctx.botInfo.id != tipReceiver.telegramId)
-          ctx.telegram.sendMessage(tipReceiver.telegramId, `You received ${amountAsString} ALPH from ${tipSender.telegramUsername}`);
-        */
-      })
-      .catch((err) => {
-        if (err instanceof NetworkError) {
-          console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
-        }
-        else if (err instanceof NotEnoughFundsError) {
-          console.error(genLogMessageErrorWhile("tipping", err.message, tipSender));
-          ctx.telegram.sendMessage(tipSender.telegramId, `You cannot send ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH to ${tipReceiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`);
-        }
-        else {
-          console.error(new GeneralError("failed to tip", {
-            error: err,
-            context: { "sender_id": tipSender.id, "received_id": tipReceiver.id, "amount": amountAsString }
-          }));
-        }
+      if (ctx.botInfo.id != receiver.telegramId)
+        ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from ${sender.telegramUsername}`);
+      */
+      // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
+      if (!isReply && ctx.botInfo.id != receiver.telegramId)
+        ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from @${sender.telegramUsername}${txStatus.genTxIdText()}`);
+    })
+    .catch((err) => {
+      if (err instanceof NetworkError) {
+        console.error(genLogMessageErrorWhile("tipping", err.message, sender));
+      }
+      else if (err instanceof NotEnoughFundsError) {
+        console.error(genLogMessageErrorWhile("tipping", err.message, sender));
+        ctx.telegram.sendMessage(sender.telegramId, `You cannot send ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH to ${receiver.telegramUsername}, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`);
+      }
+      else {
+        console.error(new GeneralError("failed to tip", {
+          error: err,
+          context: { "sender_id": sender.id, "received_id": receiver.id, "amount": amountAsString }
+        }));
+      }
 
-        txStatus.setFailed().displayUpdate();
-      });
+      txStatus.setFailed().displayUpdate();
     });
   };
 
+  const usageWithdrawal = "Send `/withdraw 1 your-alph-address`\nto withdraw 1 ALPH to _your-alph-address_.\nThe bot takes 3% fees on withdrawals.";
   const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
@@ -225,12 +249,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let destinationAddress: string;
 
     let args: RegExpMatchArray;
-    if ((args = payload.match(sendAmountDestRegex)) && 3 == args.length) {
+    if ((args = payload.match(sendAmountDestRegex)) && 3 === args.length) {
       amountAsString = args[1];
       destinationAddress = args[2];
     }
     else {
-      ctx.reply("Wrong withdrawal format, sorry.");
+      ctx.reply(usageWithdrawal, { parse_mode: "Markdown" });
       return;
     }
 
@@ -253,7 +277,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
       }
       else if (err instanceof InvalidAddressError) {
-        ctx.reply(`The provided address (${err.invalidAddress}) seems invalid.`);
+        ctx.reply(`The provided address (${err.invalidAddress()}) seems invalid.`);
         console.error(genLogMessageErrorWhile("withdrawal", err, sender));
       }
       else if (err instanceof NotEnoughFundsError) {
@@ -319,7 +343,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   // This middleware to restrict to Admin UIDs, if desired
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
     const adminUIDs = EnvConfig.telegram.admin.users;
-    console.log(EnvConfig.bot.onlyAllowAdmins);
     if (!EnvConfig.bot.onlyAllowAdmins || 0 === adminUIDs.length) { // If no admin is specified, we allow everyone
       await next();
     }
@@ -353,8 +376,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("start", "initialize your account with the bot", startFct),
     new Command("address", "display the address of your account", addressFct),
     new Command("balance", "display the balance of your account", balanceFct),
-    new Command("tip", "in response of a message tip amount to its owner", tipFct, "`<amount>`"),
-    new Command("withdraw", "send amount to the ALPH address (bot takes fees!)", withdrawFct, "`<amount> <ALPH_address>`"),
+    new Command("tip", "tip amount to a user", tipFct, usageTip),
+    new Command("withdraw", "send amount to the ALPH address (bot takes fees!)", withdrawFct, usageWithdrawal),
     new Command("privacy", "display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "ask the bot to forget about you", forgetmeFct),
     new Command("help", "display help", helpFct),
