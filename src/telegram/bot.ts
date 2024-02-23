@@ -50,11 +50,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     msg += "Please bear in mind that:\n";
     msg += " - the bot is still in alpha\n";
     msg += " - the wallet linked to your account is custodial (we hold the mnemonic) so please do not put too much money on it";
-    await ctx.reply(msg);
+    await ctx.sendMessage(msg);
 
     // Creation of wallet
     let user = new User(userId, username);
-    user = await ctx.reply("Initializing a new wallet...")
+    user = await ctx.sendMessage("Initializing a new wallet...")
     .then(lastTgMsg => {
       console.log(`Attempt to register "${user.telegramUsername}" (id: ${user.telegramId})`);
       return alphClient.registerUser(user)
@@ -77,7 +77,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
 
     if (null === user) {
-      ctx.reply(genUserMessageErrorWhile("ensuring the initialization of your account"));
+      ctx.sendMessage(genUserMessageErrorWhile("ensuring the initialization of your account"));
       return;
     }
 
@@ -88,7 +88,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   const addressFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
+      ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
     sendAddressMessage(ctx, user);
@@ -96,14 +96,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const sendAddressMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
     const link = undefined !== EnvConfig.explorerAddress() ? `its status <a href="${EnvConfig.explorerAddress()}/addresses/${user.address}">here</a> and ` : "";
-    ctx.replyWithHTML(`Your address is <code>${user.address}</code>.\nYou can see ${link}your balance with /balance.`);
+    ctx.sendMessage(`Your address is <code>${user.address}</code>.\nYou can see ${link}your balance with /balance.`, { parse_mode: "HTML" });
   };
   
   const sendBalanceMessage = (ctx: Context<Typegram.Update.MessageUpdate>, user: User) => {
     alphClient.getUserBalance(user)
-    .then(userBalance => ctx.reply(`Your account currently holds: ${userBalance} ALPH`))
+    .then(userBalance => ctx.sendMessage(`Your account currently holds: ${userBalance} ALPH`))
     .catch(err => {
-      ctx.reply(genUserMessageErrorWhile("retrieving your account balance"));
+      ctx.sendMessage(genUserMessageErrorWhile("retrieving your account balance"));
       console.error(genLogMessageErrorWhile("fetch balance", err, user));
     });
   };
@@ -115,7 +115,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
+      ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
     
@@ -129,7 +129,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     
     const sender = await getUserFromTgId(ctx.message.from.id);
     if (null === sender) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
+      ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
 
@@ -158,7 +158,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       receiver = await getUserFromTgUsername(args[2]);
       if (null === receiver) {
         console.log("User does not exist. Cannot create an account.");
-        ctx.reply("This user hasn't initialized their wallet yet.. You can initialize a wallet for this user by tipping in response.");
+        ctx.sendMessage("This user hasn't initialized their wallet yet.. You can initialize a wallet for this user by tipping in response.");
         return;
       }
       if (4 === args.length && undefined !== args[3])
@@ -191,13 +191,13 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
             error: err,
             context: { newUser, sender, amountAsString }
           }))
-          ctx.reply(`An error occured while creating a new wallet for ${newUser.telegramUsername}`);
+          ctx.sendMessage(`An error occured while creating a new wallet for ${newUser.telegramUsername}`);
           return;
         }
       }
     }
     else {
-      ctx.reply(usageTip, { parse_mode: "Markdown" });
+      ctx.sendMessage(usageTip, { parse_mode: "Markdown" });
       return;
     }
 
@@ -208,8 +208,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, amountAsString);
     console.log("msgToReplyTo: ", msgToReplyTo);
-    const setResponseTo = undefined !== msgToReplyTo ? { reply_to_message_id: msgToReplyTo } : {};
-    let previousReply = await ctx.replyWithHTML(txStatus.toString(), setResponseTo);
+    const setResponseTo = undefined !== msgToReplyTo ? { reply_to_message_id: msgToReplyTo } : { };
+    let previousReply = await ctx.sendMessage(txStatus.toString(), { parse_mode: "HTML", ...setResponseTo });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -224,7 +224,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from ${sender.telegramUsername}`);
       */
       if (wasNewAccountCreated)
-        ctx.reply(`@${receiver.telegramUsername}!` + " You received a tip! Send `/start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
+        ctx.sendMessage(`@${receiver.telegramUsername}!` + " You received a tip! Send `/start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
 
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
       if (!isReply && ctx.botInfo.id != receiver.telegramId)
@@ -258,7 +258,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const sender = await getUserFromTgId(ctx.message.from.id);
     if (null === sender) {
-      ctx.reply(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
+      ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
       return;
     }
 
@@ -276,7 +276,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       destinationAddress = args[2];
     }
     else {
-      ctx.reply(usageWithdrawal, { parse_mode: "Markdown" });
+      ctx.sendMessage(usageWithdrawal, { parse_mode: "Markdown" });
       return;
     }
 
@@ -284,7 +284,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     amountAsString = amountAsString.replace(",", ".");
 
     const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, amountAsString);
-    let lastMsg = await ctx.replyWithHTML(txStatus.toString(), { reply_to_message_id: ctx.message.message_id });
+    let lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_to_message_id: ctx.message.message_id, parse_mode: "HTML" });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
 
     console.log(`${sender.telegramId} sends ${amountAsString} ALPH to ${destinationAddress}`);
@@ -299,12 +299,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
       }
       else if (err instanceof InvalidAddressError) {
-        ctx.reply(`The provided address (${err.invalidAddress()}) seems invalid.`);
+        ctx.sendMessage(`The provided address (${err.invalidAddress()}) seems invalid.`);
         console.error(genLogMessageErrorWhile("withdrawal", err, sender));
       }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
-        ctx.reply(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_to_message_id: ctx.message.message_id });
+        ctx.sendMessage(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_to_message_id: ctx.message.message_id });
       }
       else {
         console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
@@ -326,7 +326,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     privacyMessage += "This is the minimal amount of data I need to know and store in order to enable you to tip other Alephium enthusiasts.\n";
     privacyMessage += "\nWhile I receive every message that is sent in the chats I am in (to allow you to command me), I do not consider them if they are not for me.";
     privacyMessage += "\nIf you want me to forget about you and delete the data I have about you, you can run /forgetme";
-    ctx.reply(privacyMessage);
+    ctx.sendMessage(privacyMessage);
   };
   
   const forgetmeFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
@@ -334,14 +334,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
 
     console.log("forgetme");
-    ctx.reply("This feature will be added soon™️. Thank your for your patience.\nIf you cannot wait, please reach my creators, the admins of @NoTrustVerify");
+    ctx.sendMessage("This feature will be added soon™️. Thank your for your patience.\nIf you cannot wait, please reach my creators, the admins of @NoTrustVerify");
   };
 
   const helpFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("help");
     let helpMessage = "Here is the list of commands that I handle:\n\n";
     helpMessage += commands.map(c => c.getHelpMessage()).join("\n");
-    ctx.reply(helpMessage, {parse_mode: "Markdown"});
+    ctx.sendMessage(helpMessage, {parse_mode: "Markdown"});
   };
 
   /**
@@ -389,6 +389,13 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.timeEnd(`Processing update ${ctx.update.update_id} from ${ctx.from.id}`);
   });
 
+  /**
+   * Might help to get replies in supergroup to set the bot name?
+   * https://github.com/telegraf/telegraf/issues/437
+   */
+  bot.telegram.getMe().then((botInfo) => {
+    bot.options.username = botInfo.username; 
+  });
 
   /**
    * Linking of functions with commands
