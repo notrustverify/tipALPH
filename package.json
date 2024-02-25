@@ -1,6 +1,6 @@
 {
   "name": "tipalph",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "A tipping bot for the Alephium Blockchain",
   "type": "module",
   "main": "build/index.js",

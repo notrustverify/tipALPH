@@ -25,9 +25,7 @@ export const EnvConfig = {
     bot: {
       token: process.env.TG_BOT_TOKEN as string || "",
     },
-    admin: {
-      users: (process.env.TG_ADMIN_UIDS as string || "").split(",").filter(v => v.length > 0).map(v => Number(v)),
-    },
+    admins: (process.env.TG_ADMIN_UIDS as string || "").split(",").filter(v => v.length > 0).map(v => Number(v)),
   },
   database: {
     path: process.env.DB_PATH as string,
@@ -52,7 +50,7 @@ export const EnvConfig = {
     nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
     nbConfirmationsInternalTransfer: Number(process.env.NUM_CONFIRMATIONS_INTERNAL_TRANSFER as string || "1"),
     nbConfirmationsExternalTransfer: Number(process.env.NUM_CONFIRMATIONS_EXTERNAL_TRANSFER as string || "1"),
-    onlyAllowAdmins: "true" === process.env.ONLY_ALLOW_ADMIN.toLowerCase() || false,
+    onlyAllowAdmins: "true" === (process.env.ONLY_ALLOW_ADMIN as string || "false").toLowerCase(),
   }
 } as const;
 

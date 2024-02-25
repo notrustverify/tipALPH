@@ -1,5 +1,5 @@
 import { prettifyAttoAlphAmount } from '@alephium/web3';
-import { Telegraf, Context } from 'telegraf';
+import { Telegraf, Context, Composer } from 'telegraf';
 import * as Typegram from '@telegraf/types';
 import { Repository } from 'typeorm';
 
@@ -216,19 +216,16 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     alphClient.transferFromUserToUser(sender, receiver, amountAsString, txStatus)
     .then(txId => {
       txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
-      /*  // If we want to warn users about ins and outs
-      if ("private" !== ctx.chat.type) {
-        ctx.telegram.sendMessage(sender.telegramId, `You successfully tipped ${amountAsString} ALPH to ${receiver.telegramUsername}`);
-      }
-      if (ctx.botInfo.id != receiver.telegramId)
-        ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from ${sender.telegramUsername}`);
-      */
+
+      /*
+       * We eventually notify people that received tips
+       */
       if (wasNewAccountCreated)
         ctx.sendMessage(`@${receiver.telegramUsername}!` + " You received a tip! Send `/start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
-
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
-      if (!isReply && ctx.botInfo.id != receiver.telegramId)
+      else if (!isReply && ctx.botInfo.id != receiver.telegramId)
         ctx.telegram.sendMessage(receiver.telegramId, `You received ${amountAsString} ALPH from @${sender.telegramUsername}${txStatus.genTxIdText()}`, {parse_mode: "HTML"});
+    
     })
     .catch((err) => {
       if (err instanceof NetworkError) {
@@ -364,7 +361,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   // This middleware to restrict to Admin UIDs, if desired
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    const adminUIDs = EnvConfig.telegram.admin.users;
+    const adminUIDs = EnvConfig.telegram.admins;
     if (!EnvConfig.bot.onlyAllowAdmins || 0 === adminUIDs.length) { // If no admin is specified, we allow everyone
       await next();
     }
@@ -406,6 +403,18 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   for (let cmd of commands)
     bot.command(cmd.name, cmd.process);
+
+  const adminBot = new Composer();
+  adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    if (!EnvConfig.telegram.admins.includes(ctx.from.id)) {
+      return;
+    }
+    let msgStats = "Here are some stats:\n\n";
+    msgStats += await userRepository.count() + " accounts created";
+    ctx.sendMessage(msgStats);
+  });
+
+  bot.use(Composer.acl(EnvConfig.telegram.admins), adminBot);
 
   /**
    * Signal handling and start of signal
