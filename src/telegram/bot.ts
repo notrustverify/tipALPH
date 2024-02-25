@@ -353,9 +353,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     await next();
   });
 
-  // Middleware filters out messages that are not text or messages that are forwarded
+  // Middleware filters out messages that are forwarded
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if ("message" in ctx && undefined !== ctx.message && "text" in ctx.message && undefined !== ctx.message.text && !("forward_origin" in ctx.message && undefined !== ctx.message.forward_origin))
+    if (!("forward_origin" in ctx.message && undefined !== ctx.message.forward_origin))
       await next();
   });
 
@@ -424,9 +424,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   process.once('SIGINT', () => propagateSignal('SIGINT'));
   process.once('SIGTERM', () => propagateSignal('SIGTERM'));
 
-  // TODO: could be filtered to only receive certain updates
+  // Filter to only receive messages updates
   // https://telegraf.js.org/interfaces/Telegraf.LaunchOptions.html#allowedUpdates
-  bot.launch({ dropPendingUpdates: true });
+  bot.launch({ dropPendingUpdates: true, allowedUpdates: ["message"] });
 
   const myCommands = commands.map(cmd => {return { "command": cmd.name, "description": cmd.description }});
   bot.telegram.setMyCommands(myCommands, { scope: { type: "all_private_chats" } }); // Should be Typegram.BotCommandScopeAllPrivateChats or sth similar
