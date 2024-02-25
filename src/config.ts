@@ -34,6 +34,13 @@ export interface FullNodeConfig {
   readonly apiKey?: string,
 }
 
+const enum NETWORK {
+  DEVNET = "devnet",
+  TESTNET = "testnet",
+  MAINNET = "mainnet"
+};
+const NETWORKS = [NETWORK.DEVNET, NETWORK.TESTNET, NETWORK.MAINNET];
+
 export const EnvConfig = {
   fullnode: {
     protocol: process.env.FULLNODE_PROTOCOL as string,
@@ -49,20 +56,21 @@ export const EnvConfig = {
     admins: (process.env.TG_ADMIN_UIDS as string || "").split(",").filter(v => v.length > 0).map(v => Number(v)),
   },
   database: {
-    path: process.env.DB_PATH as string,
+    path: () => process.env.DB_PATH as string || `./data/${EnvConfig.network}.database.sqlite`,
   },
-  network: process.env.NETWORK as string || "devnet",
+  // Using an array allows to pre-process elements
+  network: [process.env.NETWORK as string || ""].map((n: string) => NETWORKS.includes(n.toLowerCase()) ? n : NETWORK.DEVNET)[0],
   explorerAddress: () => {
     switch (EnvConfig.network) {
-      case "mainnet":
+      case NETWORK.MAINNET:
         return "https://explorer.alephium.org";
-      case "testnet":
+      case NETWORK.TESTNET:
         return "https://testnet.alephium.org";
       default:
         return undefined;
     }
   },
-  isOnDevNet: () => "devnet" === EnvConfig.network,
+  isOnDevNet: () => NETWORK.DEVNET === EnvConfig.network,
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
     address: process.env.OPERATOR_WALLET_ADDRESS as string,
