@@ -59,7 +59,7 @@ export const EnvConfig = {
     path: () => process.env.DB_PATH as string || `./data/${EnvConfig.network}.database.sqlite`,
   },
   // Using an array allows to pre-process elements
-  network: [process.env.NETWORK as string || ""].map((n: string) => NETWORKS.includes(n.toLowerCase()) ? n : NETWORK.DEVNET)[0],
+  network: [process.env.NETWORK as string || ""].map((n: string) => NETWORKS.map(network => network.toString()).includes(n.toLowerCase()) ? n : NETWORK.DEVNET)[0],
   explorerAddress: () => {
     switch (EnvConfig.network) {
       case NETWORK.MAINNET:
