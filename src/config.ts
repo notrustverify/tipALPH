@@ -5,6 +5,27 @@ config({ path: ['.env'] });
 const MNEMONIC_FILE = "bot_mnemonic.txt";
 const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 
+// Adapted from https://stackoverflow.com/a/16259739
+(function(){
+  if(console.log){
+      var old = console.log;
+      console.log = function(){
+          Array.prototype.unshift.call(arguments, new Date());
+          old.apply(this, arguments)
+      }
+  }  
+})();
+
+(function(){
+  if(console.error){
+      var old = console.error;
+      console.error = function(){
+          Array.prototype.unshift.call(arguments, new Date());
+          old.apply(this, arguments)
+      }
+  }  
+})();
+
 export interface FullNodeConfig {
   readonly protocol: string,
   readonly host: string,

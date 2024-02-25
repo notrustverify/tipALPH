@@ -353,9 +353,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     await next();
   });
 
-  // Middleware filters out messages that are not text
+  // Middleware filters out messages that are not text or messages that are forwarded
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if ("message" in ctx && 'text' in ctx.message)
+    if ("message" in ctx && undefined !== ctx.message && "text" in ctx.message && undefined !== ctx.message.text && !("forward_origin" in ctx.message && undefined !== ctx.message.forward_origin))
       await next();
   });
 
@@ -376,7 +376,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   // Prevent Bots from exchanging messages to prepare overruling the world
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    if ("from" in ctx && !ctx.from.is_bot)
+    if ("from" in ctx && undefined !== ctx.from && !ctx.from.is_bot)
       await next();
   });
 
@@ -406,15 +406,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const adminBot = new Composer();
   adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    if (!EnvConfig.telegram.admins.includes(ctx.from.id)) {
-      return;
-    }
     let msgStats = "Here are some stats:\n\n";
     msgStats += await userRepository.count() + " accounts created";
     ctx.sendMessage(msgStats);
   });
 
-  bot.use(Composer.acl(EnvConfig.telegram.admins), adminBot);
+  bot.use(Composer.acl(EnvConfig.telegram.admins, adminBot));
 
   /**
    * Signal handling and start of signal
