@@ -86,6 +86,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   };
 
   const addressFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    if ("private" !== ctx.update.message.chat.type) {
+      return;
+    }
     const user = await getUserFromTgId(ctx.message.from.id);
     if (null === user) {
       ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
@@ -406,6 +409,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const adminBot = new Composer();
   adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    console.log("stats");
     let msgStats = "Here are some stats:\n\n";
     msgStats += await userRepository.count() + " accounts created";
     ctx.sendMessage(msgStats);
