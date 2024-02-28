@@ -3,11 +3,11 @@ import { DataSource, Repository } from "typeorm"
 import * as bip39 from 'bip39';
 import "reflect-metadata" // Required by Typeorm
 
-import { AlphClient, createAlphClient } from "../src/alephium";
-import { FullNodeConfig } from "../src/config";
-import { User } from "../src/db/user";
-import { Token } from "../src/db/token";
-import { TokenManager } from "../src/tokenManager";
+import { AlphClient, createAlphClient } from "../src/alephium.js";
+import { FullNodeConfig } from "../src/config.js";
+import { User } from "../src/db/user.js";
+import { Token } from "../src/db/token.js";
+import { TokenManager } from "../src/tokenManager.js";
 
 // https://gist.github.com/Ciantic/be6a8b8ca27ee15e2223f642b5e01549
 export const AppDataSource = new DataSource({

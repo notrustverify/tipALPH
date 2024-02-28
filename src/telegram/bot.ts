@@ -4,12 +4,12 @@ import * as Typegram from '@telegraf/types';
 import { Repository } from 'typeorm';
 
 import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from '../error.js';
+import { ALPHSymbol, TokenAmount, TokenManager } from '../tokenManager.js';
 import { TransactionStatus } from '../transactionStatus.js';
 import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
-import { ALPHSymbol, TokenAmount, TokenManager } from '../tokenManager.js';
 
 let bot: Telegraf;
 
