@@ -74,6 +74,10 @@ export class TokenManager {
         return await this.tokenRepository.count();
     }
 
+    async getTokens(): Promise<Token[]> {
+        return await this.tokenRepository.find();
+    }
+
     async updateTokenDB() {
         if (EnvConfig.isOnDevNet()) {
             console.log("Cannot update token list for devnet");

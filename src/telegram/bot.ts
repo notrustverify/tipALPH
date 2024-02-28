@@ -309,12 +309,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     args = sendAmountDestRegex.exec(payload);
     console.log(args);
     if (null === (args = sendAmountDestRegex.exec(payload)) || !("groups" in args) || !args.groups || !({ amountAsString, tokenSymbol, destinationAddress } = args.groups) || undefined === amountAsString || undefined === destinationAddress) {
-      console.log(null === (args = sendAmountDestRegex.exec(payload)));
-      console.log(!("groups" in args))
-      console.log(!args.groups);
-      console.log(!({ amountAsString, tokenSymbol, destinationAddress } = args.groups));
-      console.log(undefined === amountAsString);
-      console.log(undefined === destinationAddress);
       ctx.sendMessage(usageWithdrawal, { parse_mode: "Markdown" });
       return;
     }
@@ -361,6 +355,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
       txStatus.setFailed().displayUpdate();
     });
+  };
+
+  const tokenListFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    console.log("tokens");
+    let tokenslistMsg = "List of tokens:\n\n";
+    const tokenList = await tokenManager.getTokens();
+    tokenslistMsg += tokenList.map(t => ` &#8226; $${t.symbol}` + (null !== t.description ? `: ${t.description}` : "")).join("\n");
+    ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML" });
   };
   
   const privacyFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
@@ -447,7 +449,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("address", "display the address of your account", addressFct),
     new Command("balance", "display the balance of your account", balanceFct),
     new Command("tip", "tip amount to a user", tipFct, usageTip),
-    new Command("withdraw", "send amount to the ALPH address (bot takes fees!)", withdrawFct, usageWithdrawal),
+    new Command("withdraw", "send amount to the ALPH address" + (EnvConfig.operator.fees > 0 ? ` (bot takes ${EnvConfig.operator.fees}% fees!)` : ""), withdrawFct, usageWithdrawal),
+    new Command("tokens", "display the list of recognized token", tokenListFct),
     new Command("privacy", "display the data protection policy of the bot", privacyFct),
     new Command("forgetme", "ask the bot to forget about you", forgetmeFct),
     new Command("help", "display help", helpFct),
@@ -461,7 +464,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log("stats");
     let msgStats = "Here are some stats:\n\n";
     msgStats += await userRepository.count() + " accounts created";
+
     ctx.sendMessage(msgStats);
+  });
+
+  adminBot.command("fees", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    let msgFees = "Addresses for fees collection:\n";
+    msgFees += EnvConfig.operator.addressesByGroup.map((a, i) => ` &#8226; G${i}: <a href="${EnvConfig.explorerAddress()}/addresses/${a}" >${a}</a>`).join("\n");
+    ctx.sendMessage(msgFees, { parse_mode: "HTML" });
   });
 
   bot.use(Composer.acl(EnvConfig.telegram.admins, adminBot));
