@@ -6,6 +6,8 @@ import "reflect-metadata" // Required by Typeorm
 import { AlphClient, createAlphClient } from "../src/alephium";
 import { FullNodeConfig } from "../src/config";
 import { User } from "../src/db/user";
+import { Token } from "../src/db/token";
+import { TokenManager } from "../src/tokenManager";
 
 // https://gist.github.com/Ciantic/be6a8b8ca27ee15e2223f642b5e01549
 export const AppDataSource = new DataSource({
@@ -20,6 +22,8 @@ export const AppDataSource = new DataSource({
 let alphClient: AlphClient;
 const testMnemonic = bip39.generateMnemonic(256);
 let userRepository: Repository<User>;
+let tokenRepository: Repository<Token>;
+let tokenManager: TokenManager;
 
 beforeAll(async() => {
   console.log(`Initializing account with mnemonic:\n${testMnemonic}`);
@@ -27,6 +31,8 @@ beforeAll(async() => {
   await AppDataSource.initialize();
 
   userRepository = AppDataSource.getRepository(User);
+  tokenRepository = AppDataSource.getRepository(Token);
+  tokenManager = new TokenManager(tokenRepository);
 
   const fullNodeConfig: FullNodeConfig = {
     protocol: "http",
@@ -34,7 +40,7 @@ beforeAll(async() => {
     port: 22973,
     addr: () => "http://127.0.0.1:22973",
   }
-  alphClient = await createAlphClient(() => testMnemonic, userRepository, fullNodeConfig);
+  alphClient = await createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager);
 });
 
 describe('Regarding NodeProvider', function () {
@@ -45,7 +51,7 @@ describe('Regarding NodeProvider', function () {
       port: 22,
       addr: () => "http://11:22",
     }
-    expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig)).rejects;
+    expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager)).rejects;
   });
 });
 
