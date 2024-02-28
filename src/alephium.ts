@@ -56,8 +56,6 @@ export class AlphClient {
   async getUserBalance(user: User): Promise<UserBalance> {
     return this.nodeProvider.addresses.getAddressesAddressBalance(user.address)
     .then(async (balance) => {
-      console.log(balance);
-
       const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
       let userBalance = [new TokenAmount(balance.balance, alphToken)];
 
@@ -131,9 +129,10 @@ export class AlphClient {
 
     if (EnvConfig.operator.fees > 0) {
       const tokenAmountOperatorFee = tokenAmount.substractAndGetPercentage(EnvConfig.operator.fees);
-      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${EnvConfig.operator.fees}%) fees on ${EnvConfig.operator.address}`);
+      const operatorFeesAddress = EnvConfig.operator.addressesByGroup[userWallet.group];
+      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${EnvConfig.operator.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
       destinations.push({
-        address: EnvConfig.operator.address,
+        address: operatorFeesAddress,
         attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
         ...{ tokens: tokenAmountOperatorFee.token.isALPH() ? [] : [{ id: tokenAmountOperatorFee.token.id, amount: tokenAmountOperatorFee.amount }]}
       });
@@ -145,7 +144,6 @@ export class AlphClient {
       ...{ tokens: tokenAmount.token.isALPH() ? [] : [{ id: tokenAmount.token.id, amount: tokenAmount.amount }]}
     });
 
-    console.log(destinations);
     const newTx = await userWallet.signAndSubmitTransferTx({
       signerAddress: (await userWallet.getSelectedAccount()).address,
       destinations,

@@ -73,7 +73,12 @@ export const EnvConfig = {
   isOnDevNet: () => NETWORK.DEVNET === EnvConfig.network,
   operator: {
     fees: Number(process.env.OPERATOR_FEES as string || "0"),
-    address: process.env.OPERATOR_WALLET_ADDRESS as string,
+    addressesByGroup: [
+        process.env.OPERATOR_WALLET_ADDRESS_G0 as string,
+        process.env.OPERATOR_WALLET_ADDRESS_G1 as string,
+        process.env.OPERATOR_WALLET_ADDRESS_G2 as string,
+        process.env.OPERATOR_WALLET_ADDRESS_G3 as string,
+    ],
   },
   bot: {
     nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
