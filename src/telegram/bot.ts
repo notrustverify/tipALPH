@@ -318,7 +318,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       ctx.sendMessage(usageWithdrawal, { parse_mode: "Markdown" });
       return;
     }
-    ctx.sendMessage(amountAsString + " " + tokenSymbol + " " + destinationAddress)
 
     const msgToReplyTo = ctx.message.message_id;
 
