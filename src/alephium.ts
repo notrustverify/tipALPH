@@ -1,30 +1,35 @@
-import { NodeProvider, bs58, convertAlphAmountWithDecimals, prettifyAttoAlphAmount } from "@alephium/web3";
+import { NodeProvider, bs58, convertAlphAmountWithDecimals, Destination } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
 import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
 import { EnvConfig, FullNodeConfig } from "./config.js";
-import { ErrorTypes, GeneralError, InvalidAddressError, NetworkError, NotEnoughFundsError, alphErrorIsNetworkError, alphErrorIsNotEnoughFundsError } from "./error.js";
+import * as Error from "./error.js";
 import { User } from "./db/user.js";
 import { TransactionStatus } from "./transactionStatus.js";
+import { TokenAmount, TokenManager, UserBalance } from "./tokenManager.js";
+
+const ALPH_AMOUNT_FOR_OTHER_TOKEN = 0.001;
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
-  private readonly mnemonicReader: () => string;    // TODO: replace by secure storage
+  private readonly mnemonicReader: () => string;
   private userStore: Repository<User>;
+  private tokenManager: TokenManager;
   private registerMutex: Mutex;
 
-  constructor(nodeProvider: NodeProvider, mnemonicReader: () => string, userStore: Repository<User>) {
+  constructor(nodeProvider: NodeProvider, mnemonicReader: () => string, userStore: Repository<User>, tokenManager: TokenManager) {
     this.nodeProvider = nodeProvider;
     this.mnemonicReader = mnemonicReader;
     this.userStore = userStore;
+    this.tokenManager = tokenManager;
     this.registerMutex = new Mutex();
   }
 
   private async registerUserExclusive(newUser: User): Promise<User> { // Should use Result<> instead of returning error when user already exists.
     if (await this.userStore.existsBy({ telegramId: newUser.telegramId })) {
-      return Promise.reject(ErrorTypes.USER_ALREADY_REGISTERED);
+      return Promise.reject(Error.ErrorTypes.USER_ALREADY_REGISTERED);
     }
     let userWithId = await this.userStore.save(newUser);
     userWithId.address = this.deriveUserAddress(userWithId);
@@ -48,31 +53,58 @@ export class AlphClient {
     return new PrivateKeyWallet({ privateKey: userPrivateKey, nodeProvider: this.nodeProvider });
   }
 
-  async getUserBalance(user: User): Promise<string> {
+  async getUserBalance(user: User): Promise<UserBalance> {
     return this.nodeProvider.addresses.getAddressesAddressBalance(user.address)
-    .then(balance => prettifyAttoAlphAmount(balance.balance))
+    .then(async (balance) => {
+      console.log(balance);
+
+      const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
+      let userBalance = [new TokenAmount(balance.balance, alphToken)];
+
+      if ("tokenBalances" in balance && undefined !== balance.tokenBalances && balance.tokenBalances.length > 0) {
+        const userTokens = await Promise.allSettled(balance.tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
+        const recognisedToken = userTokens.filter(t => "fulfilled" === t.status);
+        userBalance.push(...recognisedToken.map((t: PromiseFulfilledResult<TokenAmount>) => t.value));
+        if (userTokens.length != recognisedToken.length)
+          console.log(`${user.toString()} has un-recognised tokens:\n`+ userTokens.filter(t => "rejected" === t.status).map((t: PromiseRejectedResult) => t.reason).join("\n"));
+      }
+
+      return userBalance;
+    })
     .catch(err => {
-      if (alphErrorIsNetworkError(err))
-        return Promise.reject(new NetworkError(err));
-      else
-        return Promise.reject(new GeneralError("failed to fetch user balance", { error: err, context: { user } }));
+      if (Error.alphErrorIsNetworkError(err))
+        return Promise.reject(new Error.NetworkError(err));
+      else {
+        console.error(err);
+        return Promise.reject(new Error.GeneralError("failed to fetch user balance", { error: err, context: { user } }));
+      }
     });
   }
 
-  async transferFromUserToUser(sender: User, receiver: User, amount: string, txStatus?: TransactionStatus): Promise<string> {
+  async transferFromUserToUser(sender: User, receiver: User, tokenAmount: TokenAmount, txStatus?: TransactionStatus): Promise<string> {
     const senderWallet = this.getUserWallet(sender);
 
     const newTx = await senderWallet.signAndSubmitTransferTx({
       signerAddress: (await senderWallet.getSelectedAccount()).address,
       destinations: [
-        { address: receiver.address, attoAlphAmount: convertAlphAmountWithDecimals(amount) }
+        {
+          address: receiver.address,
+          attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+          ...{ tokens: tokenAmount.token.isALPH() ? [] : [{ id: tokenAmount.token.id, amount: tokenAmount.amount }]}
+        }
       ]
     })
     .catch((err) => {
-      if (alphErrorIsNetworkError(err))
-        return Promise.reject(new NetworkError(err));
-      else if (alphErrorIsNotEnoughFundsError(err))
-        return Promise.reject(new NotEnoughFundsError(err));
+      if (Error.alphErrorIsNetworkError(err))
+        return Promise.reject(new Error.NetworkError(err));
+      else if (Error.alphErrorIsNotEnoughFundsError(err))
+        return Promise.reject(new Error.NotEnoughFundsError(err));
+      else if (Error.alphErrorIsNotEnoughBalanceForFeeError(err))
+        return Promise.reject(new Error.NotEnoughBalanceForFeeError(err));
+      else if (Error.alphErrorIsNotEnoughALPHForTransactionOutputError(err))
+        return Promise.reject(new Error.NotEnoughALPHForTransactionOutputError(err));
+      else if (Error.alphErrorIsNotEnoughALPHForALPHAndTokenChangeOutputError(err))
+        return Promise.reject(new Error.NotEnoughALPHForALPHAndTokenChangeOutputError(err));
       else
         return Promise.reject(err);
     });
@@ -89,31 +121,40 @@ export class AlphClient {
     return newTx.txId;
   }
 
-  async sendAmountToAddressFrom(user: User, amount: string, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
+  async sendAmountToAddressFrom(user: User, tokenAmount: TokenAmount, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
     if (!isAddressValid(destinationAddress))
-      return Promise.reject(new InvalidAddressError(destinationAddress));
+      return Promise.reject(new Error.InvalidAddressError(destinationAddress));
 
     const userWallet = this.getUserWallet(user);
 
-    const attoAlphAmount = convertAlphAmountWithDecimals(amount);
-    const destinations = [
-      { address: destinationAddress, attoAlphAmount },
-    ]
+    const destinations: Destination[] = [];
 
-    if (undefined !== EnvConfig.operator.address) {
-      const operatorPart = attoAlphAmount/BigInt(100) * BigInt(EnvConfig.operator.fees);
-      console.log(`Collecting ${operatorPart} (${EnvConfig.operator.fees}%) fees on ${EnvConfig.operator.address}`);
-      destinations.push({ address: EnvConfig.operator.address, attoAlphAmount: operatorPart });
+    if (EnvConfig.operator.fees > 0) {
+      const tokenAmountOperatorFee = tokenAmount.substractAndGetPercentage(EnvConfig.operator.fees);
+      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${EnvConfig.operator.fees}%) fees on ${EnvConfig.operator.address}`);
+      destinations.push({
+        address: EnvConfig.operator.address,
+        attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+        ...{ tokens: tokenAmountOperatorFee.token.isALPH() ? [] : [{ id: tokenAmountOperatorFee.token.id, amount: tokenAmountOperatorFee.amount }]}
+      });
     }
+
+    destinations.push({
+      address: destinationAddress,
+      attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+      ...{ tokens: tokenAmount.token.isALPH() ? [] : [{ id: tokenAmount.token.id, amount: tokenAmount.amount }]}
+    });
+
+    console.log(destinations);
     const newTx = await userWallet.signAndSubmitTransferTx({
       signerAddress: (await userWallet.getSelectedAccount()).address,
       destinations,
     })
     .catch((err) => {
-      if (alphErrorIsNetworkError(err))
-        return Promise.reject(new NetworkError(err));
-      else if (alphErrorIsNotEnoughFundsError(err))
-        return Promise.reject(new NotEnoughFundsError(err));
+      if (Error.alphErrorIsNetworkError(err))
+        return Promise.reject(new Error.NetworkError(err));
+      else if (Error.alphErrorIsNotEnoughFundsError(err))
+        return Promise.reject(new Error.NotEnoughFundsError(err));
       else
         return Promise.reject(err);
     });
@@ -144,8 +185,8 @@ export class AlphClient {
       return tx;
     })
     .catch((err) => {
-      if (alphErrorIsNetworkError(err))
-        return Promise.reject(new NetworkError(err));
+      if (Error.alphErrorIsNetworkError(err))
+        return Promise.reject(new Error.NetworkError(err));
       else
         return Promise.reject(err);
     });
@@ -161,17 +202,17 @@ export class AlphClient {
       sweepResults.unsignedTxs.map(tx => userWallet.signAndSubmitUnsignedTx({ signerAddress: userWallet.address, unsignedTx: tx.unsignedTx }))
     )
     .then(promises => Promise.all(promises))
-    .then(txResults => txResults.map(tx => {console.log(`Transactions: ${tx.txId}`); return tx.txId; } ))
+    .then(txResults => txResults.map(tx => tx.txId))
     .catch((err) => {
-      if (alphErrorIsNetworkError(err))
-        return Promise.reject(new NetworkError(err));
+      if (Error.alphErrorIsNetworkError(err))
+        return Promise.reject(new Error.NetworkError(err));
       else
         return Promise.reject(err);
     });
   }
 }
 
-export async function createAlphClient(mnemonicReader: () => string, userStore: Repository<User>, fullnodeInfo: FullNodeConfig): Promise<AlphClient> {
+export async function createAlphClient(mnemonicReader: () => string, userStore: Repository<User>, fullnodeInfo: FullNodeConfig, tokenManager: TokenManager): Promise<AlphClient> {
   console.log(`Using ${fullnodeInfo.addr()} as fullnode${fullnodeInfo.apiKey ? " with API key!" : ""}`);
   const nodeProvider = fullnodeInfo.apiKey ? new NodeProvider(fullnodeInfo.addr(), fullnodeInfo.apiKey) : new NodeProvider(fullnodeInfo.addr());
 
@@ -206,7 +247,7 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
 
   console.log("NodeProvider is ready and synced!");
 
-  return new AlphClient(nodeProvider, mnemonicReader, userStore);
+  return new AlphClient(nodeProvider, mnemonicReader, userStore, tokenManager);
 }
 
 export const isAddressValid = (address: string) =>

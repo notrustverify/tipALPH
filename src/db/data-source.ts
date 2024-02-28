@@ -4,6 +4,7 @@ import "reflect-metadata"; // Required by Typeorm
 
 import { EnvConfig } from "../config.js";
 import { User } from "./user.js";
+import { Token } from './token.js'
 
 export const initializationDBMutex = new Mutex();
 initializationDBMutex.acquire();
@@ -11,9 +12,10 @@ initializationDBMutex.acquire();
 export const AppDataSource = new DataSource({
     type: "sqlite",
     database: EnvConfig.database.path(),
-    entities: [User],
+    entities: [User, Token],
     synchronize: true,
     logging: false,
+    migrations: ["./migrations/1708944182700-AddTokenTable.ts"],
 });
 
 // to initialize the initial connection with the database, register all entities

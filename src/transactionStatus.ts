@@ -1,4 +1,5 @@
 import { EnvConfig } from "./config.js";
+import { TokenAmount } from "./tokenManager.js";
 
 enum TransactionState {
     PENDING = "&#8987;",
@@ -10,14 +11,14 @@ type DisplayFunction = (a: string) => void;
 
 export class TransactionStatus{
     private readonly baseMsg: string;
-    private readonly amount: string;
+    private readonly tokenAmount: TokenAmount;
     private txId: string;
     private state: TransactionState;
     private htmlDisplayer: DisplayFunction;
 
-    constructor(baseMsg: string, amount: string, htmlDisplayer?: DisplayFunction, currentState: TransactionState = TransactionState.PENDING) {
+    constructor(baseMsg: string, tokenAmount: TokenAmount, htmlDisplayer?: DisplayFunction, currentState: TransactionState = TransactionState.PENDING) {
         this.baseMsg = baseMsg;
-        this.amount = amount;
+        this.tokenAmount = tokenAmount;
         this.state = currentState;
         this.htmlDisplayer = htmlDisplayer;
     }
@@ -55,7 +56,7 @@ export class TransactionStatus{
     }
 
     private genUpdateMsg(): string {
-        return `${this.baseMsg}\n${this.amount} ALPH ${this.state}${this.genTxIdText()}`;
+        return `${this.baseMsg}\n${this.tokenAmount.toString()} ${this.state}${this.genTxIdText()}`;
     }
 
     async displayUpdate() {
