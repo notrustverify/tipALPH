@@ -283,7 +283,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
   };
 
-  const usageWithdrawal = "Send `/withdraw 1 your-alph-address`\nto withdraw 1 ALPH to _your-alph-address_." + (EnvConfig.operator.fees > 0 ? `\nThe bot takes ${EnvConfig.operator.fees}% fees on withdrawals.` : "");
+  const usageWithdrawal = "Send `/withdraw 1 $TOKEN your-alph-address`\nto withdraw 1 $TOKEN to _your-alph-address_." + (EnvConfig.operator.fees > 0 ? `\nThe bot takes ${EnvConfig.operator.fees}% fees on withdrawals.` : "");
   const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
