@@ -1,15 +1,16 @@
 import { NodeProvider, bs58, convertAlphAmountWithDecimals, Destination } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
+import { Balance } from "@alephium/web3/dist/src/api/api-alephium.js";
 import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
-import { TokenAmount, TokenManager, UserBalance, sumUserBalance } from "./tokenManager.js";
+import { TokenAmount, UserBalance, sumUserBalance } from "./tokens/tokenAmount.js";
 import { TransactionStatus } from "./transactionStatus.js";
+import { TokenManager } from "./tokens/tokenManager.js";
 import { EnvConfig, FullNodeConfig } from "./config.js";
 import * as Error from "./error.js";
 import { User } from "./db/user.js";
-import { Balance } from "@alephium/web3/dist/src/api/api-alephium.js";
 
 const ALPH_AMOUNT_FOR_OTHER_TOKEN = 0.001;
 

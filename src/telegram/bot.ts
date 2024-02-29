@@ -4,8 +4,9 @@ import * as Typegram from '@telegraf/types';
 import { Repository } from 'typeorm';
 
 import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from '../error.js';
-import { ALPHSymbol, TokenAmount, TokenManager } from '../tokenManager.js';
+import { ALPHSymbol, TokenManager } from '../tokens/tokenManager.js';
 import { TransactionStatus } from '../transactionStatus.js';
+import { TokenAmount } from '../tokens/tokenAmount.js';
 import { Command } from './commands/command.js';
 import { AlphClient } from '../alephium.js';
 import { EnvConfig } from '../config.js';
@@ -368,11 +369,21 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
   };
 
+  const convertTimeSecToMinSec = (nbSeconds: number): string => {
+    if (nbSeconds < 60)
+      return `${Math.floor(nbSeconds)} second` + (nbSeconds > 2 ? "s" : "");
+    else {
+      const nbMinutes = Math.floor(nbSeconds/60);
+      return `${nbMinutes} minute` + (nbMinutes > 2 ? "s" : "");
+    }
+  }
+
   const tokenListFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("tokens");
     let tokenslistMsg = "List of tokens:\n\n";
     const tokenList = await tokenManager.getTokens();
     tokenslistMsg += tokenList.map(t => ` &#8226; $${t.symbol}` + (null !== t.description ? `: ${t.description}` : "")).join("\n");
+    tokenslistMsg += `\n\n<em>Next update in ${convertTimeSecToMinSec(tokenManager.nextTokenUpdate())}</em>`;
     ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML" });
   };
   
@@ -516,8 +527,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     console.log(`Stopping Telegram bot after receiving ${signal}`);
     bot.stop(signal);
   }
-  process.once('SIGINT', () => propagateSignal('SIGINT'));
-  process.once('SIGTERM', () => propagateSignal('SIGTERM'));
+  process.once('SIGINT', () => { tokenManager.stopCron(); propagateSignal('SIGINT'); });
+  process.once('SIGTERM', () => { tokenManager.stopCron(); propagateSignal('SIGTERM'); });
 
   // Filter to only receive messages updates
   // https://telegraf.js.org/interfaces/Telegraf.LaunchOptions.html#allowedUpdates
