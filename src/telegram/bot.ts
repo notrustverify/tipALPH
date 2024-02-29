@@ -185,10 +185,21 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     else if (isReply && (args = payload.match(tipAmountRegex)) && undefined !== args.groups && ({ amountAsString, tokenSymbol, reason } = args.groups) && undefined !== amountAsString) {
       console.log("By reply", amountAsString, tokenSymbol, reason);
 
+      if (undefined === ctx.message.reply_to_message) {
+        ctx.sendMessage("I am sorry but I cannot see the message you are replying to 🤷");
+        return;
+      }
+
       receiver = await getUserFromTgId(ctx.message.reply_to_message.from.id);
       if (null === receiver) {
-        console.log("User does not exists, attempt creating an account");
+
+        if (undefined === ctx.message.reply_to_message.from.username) {
+          ctx.sendMessage("It seems that this user has no publicly accessible Telegram username.\nUnfortunately, this is required to have a wallet…", { reply_to_message_id: ctx.message.message_id });
+          return;
+        }
+
         const newUser = new User(ctx.message.reply_to_message.from.id, ctx.message.reply_to_message.from.username);
+        console.log(`${newUser} does not exist, attempt creating an account`);
         try {
           receiver = await alphClient.registerUser(newUser);
           wasNewAccountCreated = true;
@@ -199,7 +210,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
             error: err,
             context: { newUser, sender, amountAsString }
           }))
-          ctx.sendMessage(`An error occured while creating a new wallet for ${newUser.telegramUsername}`);
+          ctx.sendMessage(`An error occured while creating a new wallet for ${newUser.telegramUsername}`, { reply_to_message_id: ctx.message.message_id });
           return;
         }
       }
