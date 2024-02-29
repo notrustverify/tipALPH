@@ -84,6 +84,7 @@ export const EnvConfig = {
     nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
     nbConfirmationsInternalTransfer: Number(process.env.NUM_CONFIRMATIONS_INTERNAL_TRANSFER as string || "1"),
     nbConfirmationsExternalTransfer: Number(process.env.NUM_CONFIRMATIONS_EXTERNAL_TRANSFER as string || "1"),
+    considerMempool: "true" === (process.env.CONSIDER_MEMPOOL as string || "false").toLowerCase(),
     onlyAllowAdmins: "true" === (process.env.ONLY_ALLOW_ADMIN as string || "false").toLowerCase(),
   }
 } as const;
@@ -92,7 +93,7 @@ export const readMnemonic = () => {
   for (let secretFolder of SECRET_FOLDER) {
     const secretFile = `${secretFolder}/${MNEMONIC_FILE}`;
     if (existsSync(secretFile))
-      return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'});
+      return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'}).trim();
   }
   throw new Error("mnemonic not found!");
 };

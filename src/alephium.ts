@@ -4,11 +4,12 @@ import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
+import { TokenAmount, TokenManager, UserBalance, sumUserBalance } from "./tokenManager.js";
+import { TransactionStatus } from "./transactionStatus.js";
 import { EnvConfig, FullNodeConfig } from "./config.js";
 import * as Error from "./error.js";
 import { User } from "./db/user.js";
-import { TransactionStatus } from "./transactionStatus.js";
-import { TokenAmount, TokenManager, UserBalance } from "./tokenManager.js";
+import { Balance } from "@alephium/web3/dist/src/api/api-alephium.js";
 
 const ALPH_AMOUNT_FOR_OTHER_TOKEN = 0.001;
 
@@ -53,22 +54,23 @@ export class AlphClient {
     return new PrivateKeyWallet({ privateKey: userPrivateKey, nodeProvider: this.nodeProvider });
   }
 
+  private async convertAddressBalanceToUserBalance(balance: Balance): Promise<UserBalance> {
+    const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
+    let userBalance = [new TokenAmount(balance.balance, alphToken)];
+
+    if ("tokenBalances" in balance && undefined !== balance.tokenBalances && balance.tokenBalances.length > 0) {
+      const userTokens = await Promise.allSettled(balance.tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
+      const recognisedToken = userTokens.filter(t => "fulfilled" === t.status);
+      userBalance.push(...recognisedToken.map((t: PromiseFulfilledResult<TokenAmount>) => t.value));
+      if (userTokens.length != recognisedToken.length)
+        console.log("un-recognised tokens:\n"+ userTokens.filter(t => "rejected" === t.status).map((t: PromiseRejectedResult) => t.reason).join("\n"));
+    }
+    return userBalance;
+  }
+
   async getUserBalance(user: User): Promise<UserBalance> {
     return this.nodeProvider.addresses.getAddressesAddressBalance(user.address)
-    .then(async (balance) => {
-      const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
-      let userBalance = [new TokenAmount(balance.balance, alphToken)];
-
-      if ("tokenBalances" in balance && undefined !== balance.tokenBalances && balance.tokenBalances.length > 0) {
-        const userTokens = await Promise.allSettled(balance.tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
-        const recognisedToken = userTokens.filter(t => "fulfilled" === t.status);
-        userBalance.push(...recognisedToken.map((t: PromiseFulfilledResult<TokenAmount>) => t.value));
-        if (userTokens.length != recognisedToken.length)
-          console.log(`${user.toString()} has un-recognised tokens:\n`+ userTokens.filter(t => "rejected" === t.status).map((t: PromiseRejectedResult) => t.reason).join("\n"));
-      }
-
-      return userBalance;
-    })
+    .then(balance => this.convertAddressBalanceToUserBalance(balance))
     .catch(err => {
       if (Error.alphErrorIsNetworkError(err))
         return Promise.reject(new Error.NetworkError(err));
@@ -171,7 +173,7 @@ export class AlphClient {
   async consolidateIfRequired(user: User): Promise<string> {
     console.log(`Checking if consolidation is required for user ${user.id}`);
     const userWallet = this.getUserWallet(user);
-    return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: false })
+    return this.nodeProvider.addresses.getAddressesAddressBalance(userWallet.address, { mempool: EnvConfig.bot.considerMempool })
     .then(async (addressBalance) => { 
       if (addressBalance.utxoNum < EnvConfig.bot.nbUTXOBeforeConsolidation) {
         console.log(`No need to consolidate. Only ${addressBalance.utxoNum} for wallet of user id:${user.id}`);
@@ -207,6 +209,28 @@ export class AlphClient {
       else
         return Promise.reject(err);
     });
+  }
+
+  async getTotalTokenAmount(): Promise<UserBalance> {
+    const totalNbrUsers = await this.userStore.count();
+    let totalTokenAmount: UserBalance = [];
+    let currentUserSet: User[];
+    let currentUserBalance: UserBalance[];
+    
+    const userBuffer = 30;
+    for (let i = 0; i < totalNbrUsers; i += userBuffer) {
+      currentUserSet = await this.userStore.find({ skip: userBuffer*i, take: userBuffer });
+      currentUserBalance = await Promise.all(currentUserSet.map(u => this.getUserBalance(u)));
+      currentUserBalance.push(totalTokenAmount);
+      totalTokenAmount = sumUserBalance(currentUserBalance);
+    }
+    return totalTokenAmount;
+  }
+
+  async getTotalTokenAmountFromAddresses(addresses: string[]): Promise<UserBalance> {
+    const addressesBalance = await Promise.all(addresses.map(a =>
+      this.nodeProvider.addresses.getAddressesAddressBalance(a, { mempool: EnvConfig.bot.considerMempool }).then(balance => this.convertAddressBalanceToUserBalance(balance))));
+    return sumUserBalance(addressesBalance);
   }
 }
 

@@ -470,15 +470,28 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   const adminBot = new Composer();
   adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("stats");
-    let msgStats = "Here are some stats:\n\n";
-    msgStats += await userRepository.count() + " accounts created";
+    let msgStats = `<b>${await userRepository.count()}</b> accounts created\n\n`;
+    const totalBalance = await alphClient.getTotalTokenAmount();
+    msgStats += "TVL:\n"
+    msgStats += totalBalance.map(t => ` &#8226; ${t.toString()}`).join("\n");
 
-    ctx.sendMessage(msgStats);
+    ctx.sendMessage(msgStats, { parse_mode: "HTML" });
   });
 
   adminBot.command("fees", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    console.log("fees");
     let msgFees = "Addresses for fees collection:\n";
     msgFees += EnvConfig.operator.addressesByGroup.map((a, i) => ` &#8226; G${i}: <a href="${EnvConfig.explorerAddress()}/addresses/${a}" >${a}</a>`).join("\n");
+
+    let collectionFeesAddressses: string[] = [];
+    for (let addr of EnvConfig.operator.addressesByGroup)
+      collectionFeesAddressses.push(addr);
+    
+    const totalFees = await alphClient.getTotalTokenAmountFromAddresses(collectionFeesAddressses);
+  
+    msgFees += "\n\nTotal fees collected\n";
+    msgFees += totalFees.map(t => ` &#8226; ${t.toString()}`).join("\n");
+
     ctx.sendMessage(msgFees, { parse_mode: "HTML" });
   });
 
