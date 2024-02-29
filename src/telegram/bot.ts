@@ -152,8 +152,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.trim();
-    const tipAmountUserRegex = /^\/tip(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+@(?<receiverUsername>[a-zA-Z0-9_]{4,32})(?:\s+(?<reason>.*))?/;
-    const tipAmountRegex = /^\/tip(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?(?:\s+(?<reason>.*))?/;
+    const tipAmountUserRegex = /^\/tipa?(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+@(?<receiverUsername>[a-zA-Z0-9_]{4,32})(?:\s+(?<reason>.*))?/;
+    const tipAmountRegex = /^\/tipa?(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?(?:\s+(?<reason>.*))?/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -463,6 +463,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   for (let cmd of commands)
     bot.command(cmd.name, cmd.process);
+
+  // Register some aliases (do not add in the commands array to not display it in menu & help message)
+  bot.command("tipa", tipFct);
 
   const adminBot = new Composer();
   adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
