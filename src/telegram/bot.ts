@@ -390,8 +390,13 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const helpFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("help");
-    let helpMessage = "Here is the list of commands that I handle:\n\n";
-    helpMessage += commands.map(c => c.getHelpMessage()).join("\n");
+    let helpMessage = "Here is the list of commands that I handle in this context:\n\n";
+    let commandsToDisplay = commands;
+
+    if ("private" !== ctx.message.chat.type)
+      commandsToDisplay = commandsToDisplay.filter(c => !c.isPrivate)
+
+    helpMessage += commandsToDisplay.map(c => c.getHelpMessage()).join("\n");
     ctx.sendMessage(helpMessage, {parse_mode: "Markdown"});
   };
 
@@ -445,15 +450,15 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    */
 
   commands = [
-    new Command("start", "initialize your account with the bot", startFct),
-    new Command("address", "display the address of your account", addressFct),
-    new Command("balance", "display the balance of your account", balanceFct),
-    new Command("tip", "tip amount to a user", tipFct, usageTip),
-    new Command("withdraw", "send amount to the ALPH address" + (EnvConfig.operator.fees > 0 ? ` (bot takes ${EnvConfig.operator.fees}% fees!)` : ""), withdrawFct, usageWithdrawal),
-    new Command("tokens", "display the list of recognized token", tokenListFct),
-    new Command("privacy", "display the data protection policy of the bot", privacyFct),
-    new Command("forgetme", "ask the bot to forget about you", forgetmeFct),
-    new Command("help", "display help", helpFct),
+    new Command("start", "initialize your account with the bot", startFct, true),
+    new Command("address", "display the address of your account", addressFct, true),
+    new Command("balance", "display the balance of your account", balanceFct, true),
+    new Command("tip", "tip amount to a user", tipFct, false, usageTip),
+    new Command("withdraw", "send amount to the ALPH address" + (EnvConfig.operator.fees > 0 ? ` (bot takes ${EnvConfig.operator.fees}% fees!)` : ""), withdrawFct, true, usageWithdrawal),
+    new Command("tokens", "display the list of recognized token", tokenListFct, false),
+    new Command("privacy", "display the data protection policy of the bot", privacyFct, true),
+    new Command("forgetme", "ask the bot to forget about you", forgetmeFct, true),
+    new Command("help", "display help", helpFct, false),
   ];
 
   for (let cmd of commands)
@@ -491,6 +496,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   // https://telegraf.js.org/interfaces/Telegraf.LaunchOptions.html#allowedUpdates
   bot.launch({ dropPendingUpdates: true, allowedUpdates: ["message"] });
 
-  const myCommands = commands.map(cmd => {return { "command": cmd.name, "description": cmd.description }});
-  bot.telegram.setMyCommands(myCommands, { scope: { type: "all_private_chats" } }); // Should be Typegram.BotCommandScopeAllPrivateChats or sth similar
+  bot.telegram.setMyCommands(commands.map(cmd => cmd.getTelegramCommandMenuEntry()), { scope: { type: "all_private_chats" } }); // Should be Typegram.BotCommandScopeAllPrivateChats or sth similar
+  bot.telegram.setMyCommands(commands.filter(c => !c.isPrivate).map(cmd => cmd.getTelegramCommandMenuEntry()), { scope: { type: "all_group_chats" } });
 }
