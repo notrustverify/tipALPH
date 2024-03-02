@@ -93,7 +93,7 @@ export const readMnemonic = () => {
   for (let secretFolder of SECRET_FOLDER) {
     const secretFile = `${secretFolder}/${MNEMONIC_FILE}`;
     if (existsSync(secretFile))
-      return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'}).trim();
+      return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'});
   }
   throw new Error("mnemonic not found!");
 };

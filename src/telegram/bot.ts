@@ -295,7 +295,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
   };
 
-  const usageWithdrawal = "Send `/withdraw 1 $TOKEN your-alph-address`\nto withdraw 1 $TOKEN to _your-alph-address_." + (EnvConfig.operator.fees > 0 ? `\nThe bot takes ${EnvConfig.operator.fees}% fees on withdrawals.` : "");
+  const usageWithdrawal = "Send `/withdraw 1 $TOKEN your-alph-address`\nto withdraw 1 $TOKEN to _your-alph-address_." + (EnvConfig.operator.fees > 0 ? `\n${EnvConfig.operator.fees}% withdrawal fee will be deducted from the amount you withdraw.` : "");
   const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
@@ -419,7 +419,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       commandsToDisplay = commandsToDisplay.filter(c => !c.isPrivate)
 
     helpMessage += commandsToDisplay.map(c => c.getHelpMessage()).join("\n");
-    ctx.sendMessage(helpMessage, {parse_mode: "Markdown"});
+    helpMessage += "\n\nDownload the wallets here: https://alephium.org/#wallets";
+    ctx.sendMessage(helpMessage, { parse_mode: "Markdown", disable_web_page_preview: true });
   };
 
   /**
