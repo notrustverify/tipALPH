@@ -1,4 +1,4 @@
-import * as Typegram from '@telegraf/types';
+import * as Typegram from 'telegraf/types';
 import { Context } from 'telegraf';
 
 export class Command {

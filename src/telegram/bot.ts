@@ -1,6 +1,6 @@
 import { prettifyAttoAlphAmount } from '@alephium/web3';
 import { Telegraf, Context, Composer } from 'telegraf';
-import * as Typegram from '@telegraf/types';
+import * as Typegram from 'telegraf/types';
 import { Repository } from 'typeorm';
 
 import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from '../error.js';
@@ -8,15 +8,15 @@ import { ALPHSymbol, TokenManager } from '../tokens/tokenManager.js';
 import { TransactionStatus } from '../transactionStatus.js';
 import { TokenAmount } from '../tokens/tokenAmount.js';
 import { Command } from './commands/command.js';
-import { AlphClient } from '../alephium.js';
+import { AlphClient } from '../services/alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
 
 let bot: Telegraf;
 
-export const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
+export const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message.TextMessage, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
   const parse_mode = isHTML ? "HTML" : "Markdown";
-  await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, disable_web_page_preview: linkPreview }).catch(console.error);
+  await ctx.telegram.editMessageText(lastMsg.chat.id, lastMsg.message_id, undefined, newText, { parse_mode, link_preview_options: { is_disabled: !linkPreview } }).catch(console.error);
 };
 
 export async function runTelegram(alphClient: AlphClient, userRepository: Repository<User>, tokenManager: TokenManager) {
@@ -195,7 +195,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       if (null === receiver) {
 
         if (undefined === ctx.message.reply_to_message.from.username) {
-          ctx.sendMessage("It seems that this user has no publicly accessible Telegram username.\nUnfortunately, this is required to have a wallet…", { reply_to_message_id: ctx.message.message_id });
+          ctx.sendMessage("It seems that this user has no publicly accessible Telegram username.\nUnfortunately, this is required to have a wallet…", { reply_parameters: { message_id: ctx.message.message_id } });
           return;
         }
 
@@ -211,7 +211,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
             error: err,
             context: { newUser, sender, amountAsString }
           }))
-          ctx.sendMessage(`An error occured while creating a new wallet for ${newUser.telegramUsername}`, { reply_to_message_id: ctx.message.message_id });
+          ctx.sendMessage(`An error occured while creating a new wallet for ${newUser.telegramUsername}`,  { reply_parameters: { message_id: ctx.message.message_id } });
           return;
         }
       }
@@ -228,7 +228,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol(tokenSymbol, amountAsString);
     if (undefined == tokenAmount) {
-      ctx.sendMessage("The token is invalid", { reply_to_message_id: msgToReplyTo });
+      ctx.sendMessage("The token is invalid",  { reply_parameters: { message_id: msgToReplyTo } });
       return;
     }
 
@@ -331,7 +331,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     tokenSymbol = undefined === tokenSymbol ? ALPHSymbol : tokenSymbol;
     const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol(tokenSymbol, amountAsString);
     if (undefined == tokenAmount) {
-      ctx.sendMessage("The token is invalid or does not exist.", { reply_to_message_id: msgToReplyTo });
+      ctx.sendMessage("The token is invalid or does not exist.", { reply_parameters: { message_id: msgToReplyTo } });
       return;
     }
 
@@ -339,7 +339,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     amountAsString = amountAsString.replace(",", ".");
 
     const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, tokenAmount);
-    let lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_to_message_id: msgToReplyTo, parse_mode: "HTML" });
+    let lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
 
     console.log(`${sender.telegramId} sends ${tokenAmount.toString()} to ${destinationAddress}`);
@@ -359,7 +359,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
-        ctx.sendMessage(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_to_message_id: ctx.message.message_id });
+        ctx.sendMessage(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_parameters: { message_id: ctx.message.message_id } });
       }
       else {
         console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
@@ -420,7 +420,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     helpMessage += commandsToDisplay.map(c => c.getHelpMessage()).join("\n");
     helpMessage += "\n\nDownload the wallets here: https://alephium.org/#wallets";
-    ctx.sendMessage(helpMessage, { parse_mode: "Markdown", disable_web_page_preview: true });
+    ctx.sendMessage(helpMessage, { parse_mode: "Markdown", link_preview_options: { is_disabled: true } });
   };
 
   /**

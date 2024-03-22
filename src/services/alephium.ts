@@ -5,12 +5,12 @@ import { waitTxConfirmed } from "@alephium/cli";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
-import { TokenAmount, UserBalance, sumUserBalance } from "./tokens/tokenAmount.js";
-import { TransactionStatus } from "./transactionStatus.js";
-import { TokenManager } from "./tokens/tokenManager.js";
-import { EnvConfig, FullNodeConfig } from "./config.js";
-import * as Error from "./error.js";
-import { User } from "./db/user.js";
+import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount.js";
+import { TransactionStatus } from "../transactionStatus.js";
+import { TokenManager } from "../tokens/tokenManager.js";
+import { EnvConfig, FullNodeConfig } from "../config.js";
+import * as Error from "../error.js";
+import { User } from "../db/user.js";
 
 const ALPH_AMOUNT_FOR_OTHER_TOKEN = 0.001;
 

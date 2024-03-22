@@ -1,6 +1,6 @@
 import { AppDataSource, initializationDBMutex } from "./db/data-source.js";  //!\ This import needs to be the first one!
 import { EnvConfig, readMnemonic } from "./config.js";
-import { createAlphClient } from "./alephium.js";
+import { createAlphClient } from "./services/alephium.js";
 import { TokenManager } from './tokens/tokenManager.js';
 import { runTelegram } from "./telegram/bot.js";
 import { Token } from './db/token.js';
