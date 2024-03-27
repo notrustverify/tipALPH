@@ -384,7 +384,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     const tokenList = await tokenManager.getTokens();
     tokenslistMsg += tokenList.map(t => ` &#8226; $${t.symbol}` + (null !== t.description ? `: ${t.description}` : "")).join("\n");
     tokenslistMsg += `\n\n<em>Next update in ${convertTimeSecToMinSec(tokenManager.nextTokenUpdate())}</em>`;
-    ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML" });
+    ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
   };
   
   const privacyFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
