@@ -167,6 +167,42 @@ export class NotEnoughALPHForTokenChangeOutputError extends AlphAPIError {
   }
 }
 
+const notEnoughApprovedBalanceForAddress = /^\[API Error\] - Execution error when estimating gas for tx script or contract: Not enough approved balance for address ([\d|\w]+), tokenId: (\w+), expected: (\d+), got: (\d+)$/;
+export function alphErrorIsNotEnoughApprovedBalanceForAddress(err: Error): boolean {
+  if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
+    console.error("Expected NotEnoughApprovedBalanceForAddressError: instead got", err);
+    return false;
+  }
+  let numbers: RegExpMatchArray;
+  numbers = notEnoughApprovedBalanceForAddress.exec(err.message);
+  return null !== numbers && 5 === numbers.length;
+}
+
+export class NotEnoughApprovedBalanceForAddressError extends AlphAPIError {
+  constructor(error?: Error) {
+    let args = notEnoughApprovedBalanceForAddress.exec(error.message);
+    super("not enough approved balance of token for address error", {
+      error, context: { address: args[1], token: args[2], expectedFunds: args[3], actualFunds: args[4] }
+    });
+  }
+
+  address(): string {
+    return this.context["address"];
+  }
+
+  token(): string {
+    return this.context["token"];
+  }
+
+  actualFunds(): string {
+    return this.context["actualFunds"];
+  }
+
+  expectedFunds(): string {
+    return this.context["expectedFunds"];
+  }
+}
+
 export class InvalidAddressError extends GeneralError {
   constructor(invalidAddress: string) {
     super("invalid adress error", { context: { invalidAddress } });

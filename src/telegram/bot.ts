@@ -11,6 +11,8 @@ import { Command } from './commands/command.js';
 import { AlphClient } from '../services/alephium.js';
 import { EnvConfig } from '../config.js';
 import { User } from '../db/user.js';
+import { group } from 'console';
+import { groupBy } from '../utils.js';
 
 let bot: Telegraf;
 
@@ -376,13 +378,16 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       const nbMinutes = Math.floor(nbSeconds/60);
       return `${nbMinutes} minute` + (nbMinutes > 2 ? "s" : "");
     }
-  }
+  };
 
   const tokenListFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     console.log("tokens");
     let tokenslistMsg = "List of tokens:\n\n";
+    tokenslistMsg += tokenManager.getTokensAsHTML();
+    /*
     const tokenList = await tokenManager.getTokens();
     tokenslistMsg += tokenList.map(t => ` &#8226; $${t.symbol}` + (null !== t.description ? `: ${t.description}` : "")).join("\n");
+    */
     tokenslistMsg += `\n\n<em>Next update in ${convertTimeSecToMinSec(tokenManager.nextTokenUpdate())}</em>`;
     ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
   };

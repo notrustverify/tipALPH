@@ -1,13 +1,14 @@
-import { Number256, number256ToBigint, prettifyTokenAmount } from '@alephium/web3';
+import {Number256, convertAmountWithDecimals, number256ToBigint, number256ToNumber, prettifyTokenAmount } from '@alephium/web3';
 
 import { Token } from '../db/token.js';
+import { groupBy } from '../utils.js';
 
 export class TokenAmount {
     amount: bigint;
     readonly token: Token;
 
-    constructor(amount: Number256, token: Token) {
-        this.amount = number256ToBigint(amount);
+    constructor(amount: Number256, token: Token, needConversionToDecimals: boolean = false) {
+        this.amount = needConversionToDecimals ? convertAmountWithDecimals(amount.toString(), token.decimals) : number256ToBigint(amount);
         this.token = token;
     }
 
@@ -26,17 +27,18 @@ export class TokenAmount {
         return new TokenAmount(this.computeAmountPercentage(BigInt(percentage)), this.token);
     }
 
+    public amountAsNumber(): number {
+        return number256ToNumber(this.amount, this.token.decimals);
+    }
+
     public toString = () : string => `${prettifyTokenAmount(this.amount, this.token.decimals).replaceAll(",", "'")} $${this.token.symbol}`;
+
+    public toJSON(): string {
+        return JSON.stringify(this);
+    }
 }
 
 export type UserBalance = TokenAmount[];
-
-// groupBy from https://stackoverflow.com/a/62765924
-const groupBy = <T, K extends keyof any>(arr: T[], key: (i: T) => K) =>
-    arr.reduce((groups, item) => {
-        (groups[key(item)] ||= []).push(item);
-        return groups;
-    }, {} as Record<K, T[]>);
 
 function sumSimilarTokenAmounts(tokenAmounts: TokenAmount[]): TokenAmount {
     if (0 === tokenAmounts.length)

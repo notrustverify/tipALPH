@@ -1,4 +1,4 @@
-import { NodeProvider, bs58, convertAlphAmountWithDecimals, Destination } from "@alephium/web3";
+import { NodeProvider, bs58, Destination, DUST_AMOUNT, web3, number256ToNumber, ExecuteScriptResult} from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
 import { Balance } from "@alephium/web3/dist/src/api/api-alephium.js";
 import { waitTxConfirmed } from "@alephium/cli";
@@ -6,13 +6,11 @@ import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
 import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount.js";
-import { TransactionStatus } from "../transactionStatus.js";
 import { TokenManager } from "../tokens/tokenManager.js";
+import { TransactionStatus } from "../transactionStatus.js";
 import { EnvConfig, FullNodeConfig } from "../config.js";
 import * as Error from "../error.js";
 import { User } from "../db/user.js";
-
-const ALPH_AMOUNT_FOR_OTHER_TOKEN = 0.001;
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -48,6 +46,23 @@ export class AlphClient {
 
   private deriveUserAddress(user: User): string {
     return this.getUserWallet(user).address
+  }
+
+  private adaptError(err: Error): Error {
+    if (Error.alphErrorIsNetworkError(err))
+      return new Error.NetworkError(err);
+    else if (Error.alphErrorIsNotEnoughFundsError(err))
+      return new Error.NotEnoughFundsError(err);
+    else if (Error.alphErrorIsNotEnoughBalanceForFeeError(err))
+      return new Error.NotEnoughBalanceForFeeError(err);
+    else if (Error.alphErrorIsNotEnoughApprovedBalanceForAddress(err))
+      return new Error.NotEnoughApprovedBalanceForAddressError(err);
+    else if (Error.alphErrorIsNotEnoughALPHForTransactionOutputError(err))
+      return new Error.NotEnoughALPHForTransactionOutputError(err);
+    else if (Error.alphErrorIsNotEnoughALPHForALPHAndTokenChangeOutputError(err))
+      return new Error.NotEnoughALPHForALPHAndTokenChangeOutputError(err);
+    else
+      return err;
   }
 
   getUserWallet(user: User): PrivateKeyWallet {
@@ -90,25 +105,12 @@ export class AlphClient {
       destinations: [
         {
           address: receiver.address,
-          attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+          attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : DUST_AMOUNT,
           ...{ tokens: tokenAmount.token.isALPH() ? [] : [{ id: tokenAmount.token.id, amount: tokenAmount.amount }]}
         }
       ]
     })
-    .catch((err) => {
-      if (Error.alphErrorIsNetworkError(err))
-        return Promise.reject(new Error.NetworkError(err));
-      else if (Error.alphErrorIsNotEnoughFundsError(err))
-        return Promise.reject(new Error.NotEnoughFundsError(err));
-      else if (Error.alphErrorIsNotEnoughBalanceForFeeError(err))
-        return Promise.reject(new Error.NotEnoughBalanceForFeeError(err));
-      else if (Error.alphErrorIsNotEnoughALPHForTransactionOutputError(err))
-        return Promise.reject(new Error.NotEnoughALPHForTransactionOutputError(err));
-      else if (Error.alphErrorIsNotEnoughALPHForALPHAndTokenChangeOutputError(err))
-        return Promise.reject(new Error.NotEnoughALPHForALPHAndTokenChangeOutputError(err));
-      else
-        return Promise.reject(err);
-    });
+    .catch((err) => Promise.reject(this.adaptError(err)));
     
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
@@ -136,14 +138,14 @@ export class AlphClient {
       console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${EnvConfig.operator.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
       destinations.push({
         address: operatorFeesAddress,
-        attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+        attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : DUST_AMOUNT,
         ...{ tokens: tokenAmountOperatorFee.token.isALPH() ? [] : [{ id: tokenAmountOperatorFee.token.id, amount: tokenAmountOperatorFee.amount }]}
       });
     }
 
     destinations.push({
       address: destinationAddress,
-      attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : convertAlphAmountWithDecimals(ALPH_AMOUNT_FOR_OTHER_TOKEN),
+      attoAlphAmount: tokenAmount.token.isALPH() ? tokenAmount.amount : DUST_AMOUNT,
       ...{ tokens: tokenAmount.token.isALPH() ? [] : [{ id: tokenAmount.token.id, amount: tokenAmount.amount }]}
     });
 
@@ -151,14 +153,7 @@ export class AlphClient {
       signerAddress: (await userWallet.getSelectedAccount()).address,
       destinations,
     })
-    .catch((err) => {
-      if (Error.alphErrorIsNetworkError(err))
-        return Promise.reject(new Error.NetworkError(err));
-      else if (Error.alphErrorIsNotEnoughFundsError(err))
-        return Promise.reject(new Error.NotEnoughFundsError(err));
-      else
-        return Promise.reject(err);
-    });
+    .catch((err) => Promise.reject(this.adaptError(err)));
     
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
@@ -185,12 +180,7 @@ export class AlphClient {
       console.log(`Consolidated in txId ${tx}`);
       return tx;
     })
-    .catch((err) => {
-      if (Error.alphErrorIsNetworkError(err))
-        return Promise.reject(new Error.NetworkError(err));
-      else
-        return Promise.reject(err);
-    });
+    .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
   // Inspired from https://github.com/alephium/alephium-web3/blob/master/test/exchange.test.ts#L60
@@ -204,12 +194,7 @@ export class AlphClient {
     )
     .then(promises => Promise.all(promises))
     .then(txResults => txResults.map(tx => tx.txId))
-    .catch((err) => {
-      if (Error.alphErrorIsNetworkError(err))
-        return Promise.reject(new Error.NetworkError(err));
-      else
-        return Promise.reject(err);
-    });
+    .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
   async getTotalTokenAmount(): Promise<UserBalance> {
@@ -238,6 +223,7 @@ export class AlphClient {
 export async function createAlphClient(mnemonicReader: () => string, userStore: Repository<User>, fullnodeInfo: FullNodeConfig, tokenManager: TokenManager): Promise<AlphClient> {
   console.log(`Using ${fullnodeInfo.addr()} as fullnode${fullnodeInfo.apiKey ? " with API key!" : ""}`);
   const nodeProvider = fullnodeInfo.apiKey ? new NodeProvider(fullnodeInfo.addr(), fullnodeInfo.apiKey) : new NodeProvider(fullnodeInfo.addr());
+  web3.setCurrentNodeProvider(nodeProvider);
 
   // Attempt to connect to fullnode (without using the Alephium SDK)
   let selfCliqueReq: Response;

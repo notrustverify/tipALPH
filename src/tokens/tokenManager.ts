@@ -6,6 +6,7 @@ import { CronJob } from 'cron';
 import { TokenAmount } from './tokenAmount.js';
 import { EnvConfig } from '../config.js';
 import { Token } from '../db/token.js';
+import { groupBy } from '../utils.js';
 
 export const ALPHSymbol = "ALPH";
 
@@ -13,6 +14,7 @@ export class TokenManager {
     private readonly tokenRepository: Repository<Token>;
     private readonly updateTokenMutex: Mutex;
     private readonly cronjob: CronJob;
+    private tokenListAsHTML: string;
 
     constructor(tokenRepository: Repository<Token>) {
         this.updateTokenMutex = new Mutex();
@@ -60,6 +62,19 @@ export class TokenManager {
         return await this.tokenRepository.find();
     }
 
+    getTokensAsHTML(): string {
+        return this.tokenListAsHTML
+    }
+
+    async updateTokenListAsHTML(tokens: Array<Token>) {
+        this.tokenListAsHTML = Object.entries(groupBy(tokens, t => t.symbol[0].toLowerCase())).sort((e1, e2) => e1[0].localeCompare(e2[0]))
+        .map(([_, tl]: [string, Token[]]) => " &#8226; " + 
+            tl.sort((t1, t2) => t1.symbol.localeCompare(t2.symbol))
+            .map(t => `$${t.symbol}`)
+            .join(", ")
+        ).join("\n");
+    }
+
     async updateTokenDB() {
         await this.updateTokenMutex.acquire();
         console.log("Starting token update");
@@ -75,12 +90,14 @@ export class TokenManager {
             await this.tokenRepository.save(new Token(''.padStart(64, '0'), "Alephium", "ALPH", 18));
         }
 
-        const tokenListURL = `https://github.com/alephium/token-list/raw/master/tokens/${EnvConfig.network}.json`;
-        const tokenListReq = await fetch(tokenListURL);
-        const tokenList = await tokenListReq.json();
-        const tokens = tokenList.tokens.map((t: any) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI));
+        const tokensListURL = `https://github.com/alephium/token-list/raw/master/tokens/${EnvConfig.network}.json`;
+        const tokensListReq = await fetch(tokensListURL);
+        const tokensList = await tokensListReq.json();
+        const tokens = tokensList.tokens.map((t: any) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI)) as Array<Token>;
         const ret = await this.tokenRepository.save(tokens);
         console.log(`Updated ${ret.length} tokens (${nbTokens} before)`);
+
+        this.updateTokenListAsHTML(tokens);
 
         this.updateTokenMutex.release();
     }
