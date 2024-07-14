@@ -1,6 +1,6 @@
 import { Number256 } from "@alephium/web3";
 
-import { User } from "./db/user.js";
+import { User } from "./db/user";
 
 export enum ErrorTypes {
     UN_INITIALIZED_WALLET = "It seems that you haven't initialized your wallet yet. Hit `Start` in DM with me to do it!",

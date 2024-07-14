@@ -1,18 +1,16 @@
-import { prettifyAttoAlphAmount } from '@alephium/web3';
-import { Telegraf, Context, Composer } from 'telegraf';
-import * as Typegram from 'telegraf/types';
-import { Repository } from 'typeorm';
+import { prettifyAttoAlphAmount } from "@alephium/web3";
+import { Telegraf, Context, Composer } from "telegraf";
+import * as Typegram from "telegraf/types";
+import { Repository } from "typeorm";
 
-import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from '../error.js';
-import { ALPHSymbol, TokenManager } from '../tokens/tokenManager.js';
-import { TransactionStatus } from '../transactionStatus.js';
-import { TokenAmount } from '../tokens/tokenAmount.js';
-import { Command } from './commands/command.js';
-import { AlphClient } from '../services/alephium.js';
-import { EnvConfig } from '../config.js';
-import { User } from '../db/user.js';
-import { group } from 'console';
-import { groupBy } from '../utils.js';
+import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from "../error";
+import { ALPHSymbol, TokenManager } from "../tokens/tokenManager";
+import { TransactionStatus } from "../transactionStatus";
+import { TokenAmount } from "../tokens/tokenAmount";
+import { Command } from "./commands/command";
+import { AlphClient } from "../services/alephium";
+import { EnvConfig } from "../config";
+import { User } from "../db/user";
 
 let bot: Telegraf;
 

@@ -1,5 +1,5 @@
 # Adapted from https://logfetch.com/docker-typescript-production/
-FROM node:18-alpine3.19 as ts-compiler
+FROM node:18-alpine3.19 AS ts-compiler
 WORKDIR /usr/app
 COPY package.json package-lock.json ./
 COPY tsconfig.json ./
@@ -7,7 +7,7 @@ RUN npm install
 COPY . ./
 RUN npm run build
 
-FROM node:18-bookworm as ts-remover
+FROM node:18-bookworm AS ts-remover
 WORKDIR /usr/app
 COPY --from=ts-compiler /usr/app/package.json /usr/app/package-lock.json ./
 COPY --from=ts-compiler /usr/app/build ./

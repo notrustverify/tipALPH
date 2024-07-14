@@ -1,16 +1,16 @@
 import { NodeProvider, bs58, Destination, DUST_AMOUNT, web3, number256ToNumber, ExecuteScriptResult} from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
-import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium.js";
+import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
-import { Mutex } from 'async-mutex';
+import { Mutex } from "async-mutex";
 
-import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount.js";
-import { TokenManager } from "../tokens/tokenManager.js";
-import { TransactionStatus } from "../transactionStatus.js";
-import { EnvConfig, FullNodeConfig } from "../config.js";
-import * as Error from "../error.js";
-import { User } from "../db/user.js";
-import { delay } from "../utils.js";
+import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount";
+import { TokenManager } from "../tokens/tokenManager";
+import { TransactionStatus } from "../transactionStatus";
+import { EnvConfig, FullNodeConfig } from "../config";
+import * as Error from "../error";
+import { User } from "../db/user";
+import { delay } from "../utils";
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -32,8 +32,6 @@ export class AlphClient {
 
     while (true) {
       txStatus = await this.nodeProvider.transactions.getTransactionsStatus({ txId });
-      console.log(txStatus);
-      console.log("Wanting", nbConfirmations, "confirmations");
 
       switch(txStatus.type) {
         case "TxNotfound":
@@ -49,7 +47,6 @@ export class AlphClient {
           break;
       }
 
-      console.log("Waiting")
       await delay(timeIntervallInMilliseconds);
     }
   }

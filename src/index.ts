@@ -1,12 +1,12 @@
-import { AppDataSource, initializationDBMutex } from "./db/data-source.js";  //!\ This import needs to be the first one!
-import { EnvConfig, readMnemonic } from "./config.js";
-import { createAlphClient } from "./services/alephium.js";
-import { TokenManager } from './tokens/tokenManager.js';
-import { runTelegram } from "./telegram/bot.js";
-import { Token } from './db/token.js';
-import { User } from "./db/user.js";
+import { AppDataSource, initializationDBMutex } from "./db/data-source";  //!\ This import needs to be the first one!
+import { EnvConfig, readMnemonic } from "./config";
+import { createAlphClient } from "./services/alephium";
+import { TokenManager } from "./tokens/tokenManager";
+import { runTelegram } from "./telegram/bot";
+import { Token } from "./db/token";
+import { User } from "./db/user";
 
-import * as dotenv from 'dotenv';
+import * as dotenv from "dotenv";
 
 dotenv.config();
 

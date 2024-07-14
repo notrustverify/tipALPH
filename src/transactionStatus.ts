@@ -1,5 +1,5 @@
-import { TokenAmount } from "./tokens/tokenAmount.js";
-import { EnvConfig } from "./config.js";
+import { TokenAmount } from "./tokens/tokenAmount";
+import { EnvConfig } from "./config";
 
 enum TransactionState {
     PENDING = "&#8987;",

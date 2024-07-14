@@ -1,20 +1,25 @@
 //import { AppDataSource } from "../src/db/data-source";
 import { DataSource, Repository } from "typeorm"
-import * as bip39 from 'bip39';
-import "reflect-metadata" // Required by Typeorm
+import * as bip39 from "bip39";
+import "reflect-metadata"; // Required by Typeorm
 
-import { AlphClient, createAlphClient } from "../src/alephium.js";
-import { FullNodeConfig } from "../src/config.js";
-import { User } from "../src/db/user.js";
-import { Token } from "../src/db/token.js";
-import { TokenManager } from "../src/tokenManager.js";
+import { AlphClient, createAlphClient } from "../src/services/alephium";
+import { EnvConfig, FullNodeConfig } from "../src/config";
+import * as Error from "../src/error";
+import { User } from "../src/db/user";
+import { Token } from "../src/db/token";
+import { TokenManager } from "../src/tokens/tokenManager";
+
+import * as dotenv from "dotenv";
+
+dotenv.config();
 
 // https://gist.github.com/Ciantic/be6a8b8ca27ee15e2223f642b5e01549
 export const AppDataSource = new DataSource({
   type: "sqlite",
   database: ":memory:",
   dropSchema: true,
-  entities: [User],
+  entities: [User, Token],
   synchronize: true,
   logging: false,
 });
@@ -25,22 +30,16 @@ let userRepository: Repository<User>;
 let tokenRepository: Repository<Token>;
 let tokenManager: TokenManager;
 
-beforeAll(async() => {
+beforeAll(async () => {
   console.log(`Initializing account with mnemonic:\n${testMnemonic}`);
 
   await AppDataSource.initialize();
-
   userRepository = AppDataSource.getRepository(User);
   tokenRepository = AppDataSource.getRepository(Token);
+
   tokenManager = new TokenManager(tokenRepository);
 
-  const fullNodeConfig: FullNodeConfig = {
-    protocol: "http",
-    host: "127.0.0.1",
-    port: 22973,
-    addr: () => "http://127.0.0.1:22973",
-  }
-  alphClient = await createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager);
+  alphClient = await createAlphClient(() => testMnemonic, userRepository, EnvConfig.fullnode, tokenManager);
 });
 
 describe('Regarding NodeProvider', function () {
@@ -51,7 +50,7 @@ describe('Regarding NodeProvider', function () {
       port: 22,
       addr: () => "http://11:22",
     }
-    expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager)).rejects;
+    expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager)).rejects.not.toThrow();
   });
 });
 
@@ -74,7 +73,8 @@ describe('Test AlphClient', function () {
   it("new users should be able to register", async () => {
     for (let i = 0; i < testUsers.length; i++) {
       let u = testUsers[i];
-      let storedU = await alphClient.registerUser(u);
+      let registerPromise = alphClient.registerUser(u);
+      let storedU = await registerPromise;
       expect(storedU.id).toBeGreaterThanOrEqual(i);
       expect(storedU.telegramId).toEqual(u.telegramId);
       expect(storedU.telegramUsername).toEqual(u.telegramUsername);
@@ -84,9 +84,9 @@ describe('Test AlphClient', function () {
 
   it("users should not be able to register twice", async () => {
     for (let i = 0; i< testUsers.length; i++) {
-      expect(alphClient.registerUser(testUsers[i])).rejects.toThrow();
+      await expect(alphClient.registerUser(testUsers[i])).rejects.toEqual(Error.ErrorTypes.USER_ALREADY_REGISTERED);
     }
-    expect(userRepository.count()).resolves.toEqual(testUsers.length);
+    await expect(userRepository.count()).resolves.toEqual(testUsers.length);
   });
 
   it('should work', async function () {

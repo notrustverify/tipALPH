@@ -1,5 +1,5 @@
-import * as Typegram from 'telegraf/types';
-import { Context } from 'telegraf';
+import * as Typegram from "telegraf/types";
+import { Context } from "telegraf";
 
 export class Command {
     readonly name: string;

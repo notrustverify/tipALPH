@@ -1,12 +1,12 @@
-import { convertAmountWithDecimals } from '@alephium/web3';
-import { Repository } from 'typeorm';
-import { Mutex } from 'async-mutex';
-import { CronJob } from 'cron';
+import { convertAmountWithDecimals } from "@alephium/web3";
+import { Repository } from "typeorm";
+import { Mutex } from "async-mutex";
+import { CronJob } from "cron";
 
-import { TokenAmount } from './tokenAmount.js';
-import { EnvConfig } from '../config.js';
-import { Token } from '../db/token.js';
-import { groupBy } from '../utils.js';
+import { TokenAmount } from "./tokenAmount";
+import { EnvConfig } from "../config";
+import { Token } from "../db/token";
+import { groupBy } from "../utils";
 
 export const ALPHSymbol = "ALPH";
 
@@ -75,6 +75,10 @@ export class TokenManager {
         ).join("\n");
     }
 
+    private getTokenList(tokenListJson: any): Array<Object> {
+        return "tokens" in tokenListJson ? tokenListJson.tokens : Array<Object>()
+    }
+
     async updateTokenDB() {
         await this.updateTokenMutex.acquire();
         console.log("Starting token update");
@@ -93,7 +97,7 @@ export class TokenManager {
         const tokensListURL = `https://github.com/alephium/token-list/raw/master/tokens/${EnvConfig.network}.json`;
         const tokensListReq = await fetch(tokensListURL);
         const tokensList = await tokensListReq.json();
-        const tokens = tokensList.tokens.map((t: any) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI)) as Array<Token>;
+        const tokens = this.getTokenList(tokensList).map((t: any) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI)) as Array<Token>;
         const ret = await this.tokenRepository.save(tokens);
         console.log(`Updated ${ret.length} tokens (${nbTokens} before)`);
 

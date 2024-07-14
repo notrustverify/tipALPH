@@ -2,9 +2,9 @@ import { DataSource } from "typeorm";
 import { Mutex } from "async-mutex";
 import "reflect-metadata"; // Required by Typeorm
 
-import { EnvConfig } from "../config.js";
-import { Token } from './token.js'
-import { User } from "./user.js";
+import { EnvConfig } from "../config";
+import { Token } from "./token";
+import { User } from "./user";
 
 export const initializationDBMutex = new Mutex();
 initializationDBMutex.acquire();

@@ -1,5 +1,5 @@
-import { config } from 'dotenv';
-import { existsSync, readFileSync } from 'fs';
+import { config } from "dotenv";
+import { existsSync, readFileSync } from "fs";
 
 config({ path: ['.env'] });
 const MNEMONIC_FILE = "bot_mnemonic.txt";
