@@ -1,7 +1,6 @@
 import { NodeProvider, bs58, Destination, DUST_AMOUNT, web3, number256ToNumber, ExecuteScriptResult} from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
-import { Balance } from "@alephium/web3/dist/src/api/api-alephium.js";
-import { waitTxConfirmed } from "@alephium/cli";
+import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium.js";
 import { Repository } from "typeorm";
 import { Mutex } from 'async-mutex';
 
@@ -11,6 +10,7 @@ import { TransactionStatus } from "../transactionStatus.js";
 import { EnvConfig, FullNodeConfig } from "../config.js";
 import * as Error from "../error.js";
 import { User } from "../db/user.js";
+import { delay } from "../utils.js";
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -25,6 +25,33 @@ export class AlphClient {
     this.userStore = userStore;
     this.tokenManager = tokenManager;
     this.registerMutex = new Mutex();
+  }
+
+  private async waitTxConfirmed(txId: string, nbConfirmations: number, timeIntervallInMilliseconds: number): Promise<boolean> {
+    let txStatus: Confirmed | MemPooled | TxNotFound
+
+    while (true) {
+      txStatus = await this.nodeProvider.transactions.getTransactionsStatus({ txId });
+      console.log(txStatus);
+      console.log("Wanting", nbConfirmations, "confirmations");
+
+      switch(txStatus.type) {
+        case "TxNotfound":
+          return Promise.reject("Tx Not Found");
+        case "MemPooled":
+          if (0 <= nbConfirmations)
+            return Promise.resolve(true);
+          break;
+        case "Confirmed":
+          console.log((<Confirmed>txStatus).chainConfirmations)
+          if (nbConfirmations <= (<Confirmed>txStatus).chainConfirmations)
+            return Promise.resolve(true);
+          break;
+      }
+
+      console.log("Waiting")
+      await delay(timeIntervallInMilliseconds);
+    }
   }
 
   private async registerUserExclusive(newUser: User): Promise<User> { // Should use Result<> instead of returning error when user already exists.
@@ -115,7 +142,7 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await waitTxConfirmed(this.nodeProvider, newTx.txId, EnvConfig.bot.nbConfirmationsInternalTransfer, 1000);
+    await this.waitTxConfirmed(newTx.txId, EnvConfig.bot.nbConfirmationsInternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(sender).catch(console.error);
@@ -158,7 +185,7 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await waitTxConfirmed(this.nodeProvider, newTx.txId, EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
+    await this.waitTxConfirmed(newTx.txId, EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(user).catch(console.error);
@@ -246,7 +273,7 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
   
   if (!selfCliqueContent.selfReady) {
     console.error(selfCliqueContent);
-    return Promise.reject("fullnode is not ready");    
+    return Promise.reject("fullnode is not ready");
   }
   
   if (!selfCliqueContent.synced) {
