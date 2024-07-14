@@ -255,7 +255,7 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
   // Attempt to connect to fullnode (without using the Alephium SDK)
   let selfCliqueReq: Response;
   try {
-    selfCliqueReq = await fetch(`${fullnodeInfo.addr()}/infos/self-clique`);
+    selfCliqueReq = await fetch(`${fullnodeInfo.addr()}/infos/self-clique`, fullnodeInfo.apiKey ? {headers: { "X-API-KEY": fullnodeInfo.apiKey } } : {});
     if (200 !== selfCliqueReq.status)
       return Promise.reject(`fullnode returned ${selfCliqueReq.status} (not 200 OK)`);
   }
