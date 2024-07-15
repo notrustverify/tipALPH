@@ -3,10 +3,10 @@ import { Repository } from "typeorm";
 import { Mutex } from "async-mutex";
 import { CronJob } from "cron";
 
-import { TokenAmount } from "./tokenAmount";
-import { EnvConfig } from "../config";
-import { Token } from "../db/token";
-import { groupBy } from "../utils";
+import { TokenAmount } from "./tokenAmount.js";
+import { EnvConfig } from "../config.js";
+import { Token } from "../db/token.js";
+import { groupBy } from "../utils.js";
 
 export const ALPHSymbol = "ALPH";
 

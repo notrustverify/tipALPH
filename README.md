@@ -23,9 +23,9 @@ To deploy the bot:
 5. change the variable in the `.env` file according to your setup (fullnode address, …) and insert the bot token and the address for fees in the `.env` file
 6. copy your freshly created mnemonic in a file named `bot_mnemonic.txt` in the `secrets` folder
 7. create a new TipAlph docker image with `npm run package`
-8. run `docker compose up -d` to run the fresh docker image.
+8. run `docker compose --profile tipalph up -d` to run the fresh docker image.
 
-On the logs (with `docker compose logs -f`), you should see a successful connection to the database as well as a ready and synced NodeProvider.   
+On the logs (with `docker compose --profile tipalph logs -f`), you should see a successful connection to the database as well as a ready and synced NodeProvider.  
 The telegram bot should now be available.
 
 ## How to develop
@@ -42,11 +42,28 @@ There is multiple way of running the code application:
 
 These are defined in the _package.json_ file.
 
+## How to test
+
+Before running the test suite, you need to have a fullnode on the devnet accessible to `http://127.0.0.1:22973`.  
+The easiest way to do it is to start a docker container before running the test suite. This can be simply archived by running: `docker compose --profile test up -d` and waiting some seconds.
+
+Tests can be run using `npm run test`.
+
+To add coverage, edit the `jest.config.cjs` file and set `collectCoverage` to `true`;
+
+### Alephium side
+
+We wrote some code to test the alephium client that our bot uses, to ensure that we correctly use it.
+
+### Telegram side
+
+It seems to be really complicated to test Telegram bots (integration tests, by sending Telegram messages). If you know how to do it, please reach out to us or do a PR!
+
 ## Building the docker container
 
 We provide a Dockerfile to build the container. The easiest way to build a new image is by running the `npm run package` commands, which takes care of settings the appropriate tags for you.
 
-To create a docker container from the freshly built image, we recommend using the provided docker-compose.yml file with the required configuration. Once you provided the required [dependencies](#dependencies), simply do a `docker compose up` to spin a new container.
+To create a docker container from the freshly built image, we recommend using the provided docker-compose.yml file with the required configuration. Once you provided the required [dependencies](#dependencies), simply do a `docker compose --profile tipalph up` to spin a new container.
 
 ## License
 

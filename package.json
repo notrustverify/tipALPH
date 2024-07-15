@@ -11,7 +11,7 @@
     "watch": "tsx watch --clear-screen=false src/index.ts",
     "clean": "rm -r build 2> /dev/null",
     "lint": "eslint . --ext .ts",
-    "test": "jest -i --forceExit --detectOpenHandles",
+    "test": "echo -e '\\e[93m/!\\ Ensure to have a devnet fullnode running on http://127.0.0.1:22973 /!\\ \\e[0m' && jest -i --forceExit --detectOpenHandles",
     "package": "docker build --no-cache -t tipalph:v$(jq -r .version package.json) -t tipalph:latest .",
     "write-migration-file": "npx typeorm-ts-node-esm migration:generate -d src/db/data-source.ts"
   },

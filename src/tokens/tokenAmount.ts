@@ -1,7 +1,7 @@
 import {Number256, convertAmountWithDecimals, number256ToBigint, number256ToNumber, prettifyTokenAmount } from "@alephium/web3";
 
-import { Token } from "../db/token";
-import { groupBy } from "../utils";
+import { Token } from "../db/token.js";
+import { groupBy } from "../utils.js";
 
 export class TokenAmount {
     amount: bigint;

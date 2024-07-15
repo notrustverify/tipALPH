@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn, Column, Unique, Index } from "typeorm"
 
-import { ALPHSymbol } from "../tokens/tokenManager";
+import { ALPHSymbol } from "../tokens/tokenManager.js";
 
 @Entity()
 @Unique(["id", "symbol"])

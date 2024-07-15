@@ -1,5 +1,6 @@
 
 services:
+
   tipalph:
     image: tipalph:latest
     restart: "always"
@@ -9,6 +10,51 @@ services:
     secrets:
       - source: bot_mnemonic.txt
         mode: 0400
+    profiles:
+      - tipalph
+
+  fullnode-mainnet:
+    extends: fullnode-common
+    volumes:
+      - ./fullnode/data_testnet:/alephium-home/.alephium
+    profiles:
+      - fullnode-mainnet
+
+  fullnode-testnet:
+    extends: fullnode-common
+    volumes:
+      - ./fullnode/data_testnet:/alephium-home/.alephium
+    environment:
+      ALEPHIUM_FILE_LOG_LEVEL: "DEBUG"
+    profiles:
+      - fullnode-testnet
+
+  fullnode-devnet:
+    extends: fullnode-common
+    volumes:
+      - ./fullnode/data_devnet/user.conf:/alephium-home/.alephium/user.conf
+    environment:
+      ALEPHIUM_FILE_LOG_LEVEL: "DEBUG"
+    profiles:
+      - test
+      - fullnode-devnet
+
+  fullnode-common:
+    image: alephium/alephium:latest
+    restart: "no"
+    ports:
+      - 19973:19973/tcp
+      - 19973:19973/udp
+      - 127.0.0.1:20973:20973
+      - 127.0.0.1:21973:21973
+      - 127.0.0.1:22973:22973
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "http://127.0.0.1:22973/infos/self-clique"]
+      timeout: 45s
+    profiles:
+      - ShouldNeverBeStartedByDefaultSoWeGiveAProfile
 
 secrets:
   bot_mnemonic.txt:

@@ -4,13 +4,13 @@ import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/s
 import { Repository } from "typeorm";
 import { Mutex } from "async-mutex";
 
-import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount";
-import { TokenManager } from "../tokens/tokenManager";
-import { TransactionStatus } from "../transactionStatus";
-import { EnvConfig, FullNodeConfig } from "../config";
-import * as Error from "../error";
-import { User } from "../db/user";
-import { delay } from "../utils";
+import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount.js";
+import { TokenManager } from "../tokens/tokenManager.js";
+import { TransactionStatus } from "../transactionStatus.js";
+import { EnvConfig, FullNodeConfig } from "../config.js";
+import * as Error from "../error.js";
+import { User } from "../db/user.js";
+import { delay } from "../utils.js";
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -51,6 +51,7 @@ export class AlphClient {
     }
   }
 
+  /*
   private async registerUserExclusive(newUser: User): Promise<User> { // Should use Result<> instead of returning error when user already exists.
     if (await this.userStore.existsBy({ telegramId: newUser.telegramId })) {
       return Promise.reject(Error.ErrorTypes.USER_ALREADY_REGISTERED);
@@ -59,9 +60,17 @@ export class AlphClient {
     userWithId.address = this.deriveUserAddress(userWithId);
     return this.userStore.save(userWithId);
   }
+  */
 
   async registerUser(newUser: User): Promise<User> {
-    return this.registerMutex.runExclusive(() => this.registerUserExclusive(newUser));
+    return this.registerMutex.runExclusive(async () => { // Should use Result<> instead of returning error when user already exists.
+      if (await this.userStore.existsBy({ telegramId: newUser.telegramId })) {
+        return Promise.reject(Error.ErrorTypes.USER_ALREADY_REGISTERED);
+      }
+      let userWithId = await this.userStore.save(newUser);
+      userWithId.address = this.deriveUserAddress(userWithId);
+      return this.userStore.save(userWithId);
+    });
   }
 
   private deriveUserIterator(user: User): number {
