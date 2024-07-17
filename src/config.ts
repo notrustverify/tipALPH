@@ -34,6 +34,11 @@ export interface FullNodeConfig {
   readonly apiKey?: string,
 }
 
+export interface OperatorConfig {
+  readonly fees: number
+  readonly addressesByGroup: readonly [string, string, string, string]
+}
+
 const enum NETWORK {
   DEVNET = "devnet",
   TESTNET = "testnet",

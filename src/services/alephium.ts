@@ -1,4 +1,4 @@
-import { NodeProvider, bs58, Destination, DUST_AMOUNT, web3, number256ToNumber, ExecuteScriptResult} from "@alephium/web3";
+import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
 import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
@@ -7,7 +7,7 @@ import { Mutex } from "async-mutex";
 import { TokenAmount, UserBalance, sumUserBalance } from "../tokens/tokenAmount.js";
 import { TokenManager } from "../tokens/tokenManager.js";
 import { TransactionStatus } from "../transactionStatus.js";
-import { EnvConfig, FullNodeConfig } from "../config.js";
+import { EnvConfig, FullNodeConfig, OperatorConfig } from "../config.js";
 import * as Error from "../error.js";
 import { User } from "../db/user.js";
 import { delay } from "../utils.js";
@@ -17,13 +17,15 @@ export class AlphClient {
   private readonly mnemonicReader: () => string;
   private userStore: Repository<User>;
   private tokenManager: TokenManager;
+  private operatorConfig: OperatorConfig;
   private registerMutex: Mutex;
 
-  constructor(nodeProvider: NodeProvider, mnemonicReader: () => string, userStore: Repository<User>, tokenManager: TokenManager) {
+  constructor(nodeProvider: NodeProvider, mnemonicReader: () => string, userStore: Repository<User>, tokenManager: TokenManager, operatorConfig: OperatorConfig) {
     this.nodeProvider = nodeProvider;
     this.mnemonicReader = mnemonicReader;
     this.userStore = userStore;
     this.tokenManager = tokenManager;
+    this.operatorConfig = operatorConfig;
     this.registerMutex = new Mutex();
   }
 
@@ -50,17 +52,6 @@ export class AlphClient {
       await delay(timeIntervallInMilliseconds);
     }
   }
-
-  /*
-  private async registerUserExclusive(newUser: User): Promise<User> { // Should use Result<> instead of returning error when user already exists.
-    if (await this.userStore.existsBy({ telegramId: newUser.telegramId })) {
-      return Promise.reject(Error.ErrorTypes.USER_ALREADY_REGISTERED);
-    }
-    let userWithId = await this.userStore.save(newUser);
-    userWithId.address = this.deriveUserAddress(userWithId);
-    return this.userStore.save(userWithId);
-  }
-  */
 
   async registerUser(newUser: User): Promise<User> {
     return this.registerMutex.runExclusive(async () => { // Should use Result<> instead of returning error when user already exists.
@@ -158,17 +149,17 @@ export class AlphClient {
   }
 
   async sendAmountToAddressFrom(user: User, tokenAmount: TokenAmount, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
-    if (!isAddressValid(destinationAddress))
+    if (!isValidAddress(destinationAddress))
       return Promise.reject(new Error.InvalidAddressError(destinationAddress));
 
     const userWallet = this.getUserWallet(user);
 
     const destinations: Destination[] = [];
 
-    if (EnvConfig.operator.fees > 0) {
-      const tokenAmountOperatorFee = tokenAmount.substractAndGetPercentage(EnvConfig.operator.fees);
-      const operatorFeesAddress = EnvConfig.operator.addressesByGroup[userWallet.group];
-      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${EnvConfig.operator.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
+    if (this.operatorConfig.fees > 0) {
+      const tokenAmountOperatorFee = tokenAmount.substractAndGetPercentage(this.operatorConfig.fees);
+      const operatorFeesAddress = this.operatorConfig.addressesByGroup[userWallet.group];
+      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${this.operatorConfig.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
       destinations.push({
         address: operatorFeesAddress,
         attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : DUST_AMOUNT,
@@ -253,7 +244,7 @@ export class AlphClient {
   }
 }
 
-export async function createAlphClient(mnemonicReader: () => string, userStore: Repository<User>, fullnodeInfo: FullNodeConfig, tokenManager: TokenManager): Promise<AlphClient> {
+export async function createAlphClient(mnemonicReader: () => string, userStore: Repository<User>, fullnodeInfo: FullNodeConfig, tokenManager: TokenManager, operatorConfig: OperatorConfig): Promise<AlphClient> {
   console.log(`Using ${fullnodeInfo.addr()} as fullnode${fullnodeInfo.apiKey ? " with API key!" : ""}`);
   const nodeProvider = fullnodeInfo.apiKey ? new NodeProvider(fullnodeInfo.addr(), fullnodeInfo.apiKey) : new NodeProvider(fullnodeInfo.addr());
   web3.setCurrentNodeProvider(nodeProvider);
@@ -289,8 +280,5 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
 
   console.log("NodeProvider is ready and synced!");
 
-  return new AlphClient(nodeProvider, mnemonicReader, userStore, tokenManager);
+  return new AlphClient(nodeProvider, mnemonicReader, userStore, tokenManager, operatorConfig);
 }
-
-export const isAddressValid = (address: string) =>
-  !!address && /^[1-9A-HJ-NP-Za-km-z]+$/.test(address) && bs58.decode(address).slice(1).length >= 32

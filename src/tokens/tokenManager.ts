@@ -31,6 +31,10 @@ export class TokenManager {
         return this.tokenRepository.findOneBy({ symbol });
     }
 
+    async getAlphToken(): Promise<Token> {
+        return this.tokenRepository.findOneBy({ symbol: "ALPH" });
+    }
+
     async getTokenByCaseInsensitiveSymbol(caseInsensitiveSymbol: string): Promise<Token> {
         return this.tokenRepository.createQueryBuilder().where("LOWER(symbol) = :s", { s: `${ caseInsensitiveSymbol.toLowerCase() }` }).getOne();
     }

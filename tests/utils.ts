@@ -1,6 +1,6 @@
 const memoized: Map<number, number> = new Map();
 
-function roundToXDecimals(val: number, x: number) {
+export function roundToXDecimals(val: number, x: number): number {
     let amplifier: number;
     if (memoized.has(x))
         amplifier = memoized.get(x)!;
@@ -9,14 +9,10 @@ function roundToXDecimals(val: number, x: number) {
     return Math.round(val * amplifier) / amplifier;
 }
 
-export function roundToTwoDecimals(val: number) {
+export function roundToTwoDecimals(val: number): number {
     return roundToXDecimals(val, 2);
 }
 
-export function roundToThreeDecimals(val: number) {
+export function roundToThreeDecimals(val: number): number {
     return roundToXDecimals(val, 3);
-}
-
-export function roundToSixDecimals(val: number) {
-    return roundToXDecimals(val, 6);
 }
