@@ -23,7 +23,7 @@ export class GeneralError extends Error {
   constructor(message: string, options: { error?: Error, context?: Jsonable } = {}) {
     const { error, context } = options;
 
-    super(message, error );
+    super(message, error);
     this.name = this.constructor.name;
 
     this.context = context;
@@ -43,8 +43,8 @@ export class NetworkError extends GeneralError {
 const alphAPIErrorRegex = /^[API Error] - /;
 
 export function alphErrorIsAPIError(err: Error): boolean {
-  let args: RegExpMatchArray
-  return (args = alphAPIErrorRegex.exec(err.message)) && 1 == args.length;
+  const args = alphAPIErrorRegex.exec(err.message)
+  return null != args && 1 == args.length;
 }
 
 export class AlphAPIError extends GeneralError {
@@ -89,17 +89,14 @@ export function alphErrorIsNotEnoughFundsError(err: Error): boolean {
     console.error("Expected NotEnoughFundsError: instead got", err);
     return false;
   }
-  let numbers: RegExpMatchArray;
-  numbers = notEnoughFundsRegex.exec(err.message);
+  const numbers = notEnoughFundsRegex.exec(err.message);
   return null !== numbers && 3 === numbers.length;
 }
 
 export class NotEnoughFundsError extends AlphAPIError {
-  constructor(error?: Error) {
-    let args = notEnoughFundsRegex.exec(error.message);
-    super("not enough funds error", {
-      error, context: { actualFunds: args[1], requiredFunds: args[2] }
-    });
+  constructor(error: Error) {
+    const args = notEnoughFundsRegex.exec(error.message)!;
+    super("not enough funds error", { error, context: { actualFunds: args[1], requiredFunds: args[2] } });
   }
 
   actualFunds(): Number256 {
@@ -117,14 +114,13 @@ export function alphErrorIsNotEnoughALPHForALPHAndTokenChangeOutputError(err: Er
     console.error("Expected NotEnoughALPHForALPHAndTokenChangeOutputError: instead got", err);
     return false;
   }
-  let numbers: RegExpMatchArray;
-  numbers = notEnoughALPHForALPHAndTokenChangeOutput.exec(err.message);
+  const numbers = notEnoughALPHForALPHAndTokenChangeOutput.exec(err.message);
   return null !== numbers && 3 === numbers.length;
 }
 
 export class NotEnoughALPHForALPHAndTokenChangeOutputError extends AlphAPIError {
-  constructor(error?: Error) {
-    let args = notEnoughALPHForALPHAndTokenChangeOutput.exec(error.message);
+  constructor(error: Error) {
+    const args = notEnoughALPHForALPHAndTokenChangeOutput.exec(error.message)!;
     super("not enough ALPH for ALPH and token change output error", {
       error, context: { expectedFunds: args[1], actualFunds: args[2] }
     });
@@ -145,14 +141,13 @@ export function alphErrorIsNotEnoughALPHForTokenChangeOutputError(err: Error): b
     console.error("Expected NotEnoughALPHForTokenChangeOutputError: instead got", err);
     return false;
   }
-  let numbers: RegExpMatchArray;
-  numbers = notEnoughALPHForTokenChangeOutputRegex.exec(err.message);
+  const numbers = notEnoughALPHForTokenChangeOutputRegex.exec(err.message);
   return null !== numbers && 3 === numbers.length;
 }
 
 export class NotEnoughALPHForTokenChangeOutputError extends AlphAPIError {
-  constructor(error?: Error) {
-    let args = notEnoughALPHForTokenChangeOutputRegex.exec(error.message);
+  constructor(error: Error) {
+    const args = notEnoughALPHForTokenChangeOutputRegex.exec(error.message)!;
     super("not enough ALPH for token change output error", {
       error, context: { expectedFunds: args[1], actualFunds: args[2] }
     });
@@ -173,14 +168,13 @@ export function alphErrorIsNotEnoughApprovedBalanceForAddress(err: Error): boole
     console.error("Expected NotEnoughApprovedBalanceForAddressError: instead got", err);
     return false;
   }
-  let numbers: RegExpMatchArray;
-  numbers = notEnoughApprovedBalanceForAddress.exec(err.message);
+  const numbers = notEnoughApprovedBalanceForAddress.exec(err.message);
   return null !== numbers && 5 === numbers.length;
 }
 
 export class NotEnoughApprovedBalanceForAddressError extends AlphAPIError {
-  constructor(error?: Error) {
-    let args = notEnoughApprovedBalanceForAddress.exec(error.message);
+  constructor(error: Error) {
+    const args = notEnoughApprovedBalanceForAddress.exec(error.message)!;
     super("not enough approved balance of token for address error", {
       error, context: { address: args[1], token: args[2], expectedFunds: args[3], actualFunds: args[4] }
     });

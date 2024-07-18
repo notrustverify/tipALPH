@@ -32,7 +32,7 @@ export class AlphClient {
   private async waitTxConfirmed(txId: string, nbConfirmations: number, timeIntervallInMilliseconds: number): Promise<boolean> {
     let txStatus: Confirmed | MemPooled | TxNotFound
 
-    while (true) {
+    for(;;) { // Equivalent of while(true) but satisfies the linter
       txStatus = await this.nodeProvider.transactions.getTransactionsStatus({ txId });
 
       switch(txStatus.type) {
@@ -58,7 +58,7 @@ export class AlphClient {
       if (await this.userStore.existsBy({ telegramId: newUser.telegramId })) {
         return Promise.reject(Error.ErrorTypes.USER_ALREADY_REGISTERED);
       }
-      let userWithId = await this.userStore.save(newUser);
+      const userWithId = await this.userStore.save(newUser);
       userWithId.address = this.deriveUserAddress(userWithId);
       return this.userStore.save(userWithId);
     });
@@ -96,7 +96,7 @@ export class AlphClient {
 
   private async convertAddressBalanceToUserBalance(balance: Balance): Promise<UserBalance> {
     const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
-    let userBalance = [new TokenAmount(balance.balance, alphToken)];
+    const userBalance = [new TokenAmount(balance.balance, alphToken)];
 
     if ("tokenBalances" in balance && undefined !== balance.tokenBalances && balance.tokenBalances.length > 0) {
       const userTokens = await Promise.allSettled(balance.tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
@@ -249,7 +249,7 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
   const nodeProvider = fullnodeInfo.apiKey ? new NodeProvider(fullnodeInfo.addr(), fullnodeInfo.apiKey) : new NodeProvider(fullnodeInfo.addr());
   web3.setCurrentNodeProvider(nodeProvider);
 
-  // Attempt to connect to fullnode (without using the Alephium SDK)
+  // Attempt to connect to fullnode (without using the Alephium SDK)
   let selfCliqueReq: Response;
   try {
     selfCliqueReq = await fetch(`${fullnodeInfo.addr()}/infos/self-clique`, fullnodeInfo.apiKey ? {headers: { "X-API-KEY": fullnodeInfo.apiKey } } : {});
@@ -260,7 +260,7 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
     return Promise.reject("fullnode is not reachable");
   }
   
-  let selfCliqueContent: any;
+  let selfCliqueContent: unknown;
   try {
     selfCliqueContent = await selfCliqueReq.json();
   }
@@ -268,12 +268,12 @@ export async function createAlphClient(mnemonicReader: () => string, userStore: 
     return Promise.reject("fullnode replied non-json body");
   }
   
-  if (!selfCliqueContent.selfReady) {
+  if (!selfCliqueContent["selfReady"]) {
     console.error(selfCliqueContent);
     return Promise.reject("fullnode is not ready");
   }
   
-  if (!selfCliqueContent.synced) {
+  if (!selfCliqueContent["synced"]) {
     console.error(selfCliqueContent);
     return Promise.reject("fullnode is not synced");
   }

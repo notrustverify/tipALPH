@@ -3,7 +3,7 @@ import { Telegraf, Context, Composer } from "telegraf";
 import * as Typegram from "telegraf/types";
 import { Repository } from "typeorm";
 
-import { ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from "../error.js";
+import { AlphAPIError, ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from "../error.js";
 import { ALPHSymbol, TokenManager } from "../tokens/tokenManager.js";
 import { TransactionStatus } from "../transactionStatus.js";
 import { TokenAmount } from "../tokens/tokenAmount.js";
@@ -24,7 +24,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   
   bot = new Telegraf(EnvConfig.telegram.bot.token);
 
-  let commands: Command[];
+  const commands: Command[] = [];
 
   /**
    * Utility functions
@@ -153,8 +153,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.trim();
-    const tipAmountUserRegex = /^\/tipa?(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+@(?<receiverUsername>[a-zA-Z0-9_]{4,32})(?:\s+(?<reason>.*))?/;
-    const tipAmountRegex = /^\/tipa?(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?(?:\s+(?<reason>.*))?/;
+    const tipAmountUserRegex = /^\/tipa?(?:@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+@(?<receiverUsername>[a-zA-Z0-9_]{4,32})(?:\s+(?<reason>.*))?/;
+    const tipAmountRegex = /^\/tipa?(?:@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?(?:\s+(?<reason>.*))?/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -239,7 +239,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, tokenAmount);
     const setResponseTo = undefined !== msgToReplyTo ? { reply_to_message_id: msgToReplyTo } : { };
-    let previousReply = await ctx.sendMessage(txStatus.toString(), { parse_mode: "HTML", ...setResponseTo });
+    const previousReply = await ctx.sendMessage(txStatus.toString(), { parse_mode: "HTML", ...setResponseTo });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
@@ -310,7 +310,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.trim();
-    const sendAmountDestRegex = /^\/withdraw(?:\@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+)$/;
+    const sendAmountDestRegex = /^\/withdraw(?:@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+)$/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -339,7 +339,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     amountAsString = amountAsString.replace(",", ".");
 
     const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, tokenAmount);
-    let lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
+    const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
     txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
 
     console.log(`${sender.telegramId} sends ${tokenAmount.toString()} to ${destinationAddress}`);
@@ -361,8 +361,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
         ctx.sendMessage(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_parameters: { message_id: ctx.message.message_id } });
       }
+      else if (err instanceof AlphAPIError) {
+        console.error("API error", err);
+      }
       else {
-        console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
+        console.error(err);
+        //console.error(new GeneralError("withdrawal", { error: err, context: { sender, amountAsString, destinationAddress } }));
       }
 
       txStatus.setFailed().displayUpdate();
@@ -475,7 +479,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
    * Linking of functions with commands
    */
 
-  commands = [
+  commands.push(
     new Command("start", "initialize your account with the bot", startFct, true),
     new Command("address", "display the address of your account", addressFct, true),
     new Command("balance", "display the balance of your account", balanceFct, true),
@@ -485,9 +489,9 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("privacy", "display the data protection policy of the bot", privacyFct, true),
     new Command("forgetme", "ask the bot to forget about you", forgetmeFct, true),
     new Command("help", "display help", helpFct, false),
-  ];
+  );
 
-  for (let cmd of commands)
+  for (const cmd of commands)
     bot.command(cmd.name, cmd.process);
 
   // Register some aliases (do not add in the commands array to not display it in menu & help message)
@@ -509,8 +513,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let msgFees = "Addresses for fees collection:\n";
     msgFees += EnvConfig.operator.addressesByGroup.map((a, i) => ` &#8226; G${i}: <a href="${EnvConfig.explorerAddress()}/addresses/${a}" >${a}</a>`).join("\n");
 
-    let collectionFeesAddressses: string[] = [];
-    for (let addr of EnvConfig.operator.addressesByGroup)
+    const collectionFeesAddressses: string[] = [];
+    for (const addr of EnvConfig.operator.addressesByGroup)
       collectionFeesAddressses.push(addr);
     
     const totalFees = await alphClient.getTotalTokenAmountFromAddresses(collectionFeesAddressses);

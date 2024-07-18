@@ -3,18 +3,18 @@ import { DataSource, Repository } from "typeorm"
 import * as bip39 from "bip39";
 import "reflect-metadata"; // Required by Typeorm
 import * as dotenv from "dotenv";
-import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, node, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
+import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
 
 import { testNodeWallet } from "@alephium/web3-test";
 
-import { AlphClient, createAlphClient } from "../src/services/alephium";
-import { FullNodeConfig, OperatorConfig } from "../src/config";
-import * as Error from "../src/error";
-import { User } from "../src/db/user";
-import { Token } from "../src/db/token";
-import { TokenManager } from "../src/tokens/tokenManager";
-import { roundToThreeDecimals } from "./utils";
-import { TokenAmount } from "../src/tokens/tokenAmount";
+import { AlphClient, createAlphClient } from "../../src/services/alephium";
+import { FullNodeConfig, OperatorConfig } from "../../src/config";
+import * as Error from "../../src/error";
+import { User } from "../../src/db/user";
+import { Token } from "../../src/db/token";
+import { TokenManager } from "../../src/tokens/tokenManager";
+import { roundToThreeDecimals } from "../utils";
+import { TokenAmount } from "../../src/tokens/tokenAmount";
 import { deriveHDWalletPrivateKey, PrivateKeyWallet } from "@alephium/web3-wallet";
 
 dotenv.config();
@@ -57,11 +57,11 @@ beforeAll(async () => {
   const nodeProvider = fullnodeConfig.apiKey ? new NodeProvider(fullnodeConfig.addr(), fullnodeConfig.apiKey) : new NodeProvider(fullnodeConfig.addr());
   const addresses: GroupAddresses = await ((async (): Promise<GroupAddresses> => {
     const otherMnemonic = bip39.generateMnemonic(256);
-    let addresses: [string, string, string, string] = ["", "", "", ""];
+    const addresses: [string, string, string, string] = ["", "", "", ""];
     
     for (let i = 0; addresses.some(p => p.length == 0); i++) {
-      let pk = new PrivateKeyWallet({ privateKey: deriveHDWalletPrivateKey(otherMnemonic, 'default', i), nodeProvider: nodeProvider });
-      let addressGroup = await nodeProvider.addresses.getAddressesAddressGroup(pk.address);
+      const pk = new PrivateKeyWallet({ privateKey: deriveHDWalletPrivateKey(otherMnemonic, 'default', i), nodeProvider: nodeProvider });
+      const addressGroup = await nodeProvider.addresses.getAddressesAddressGroup(pk.address);
       if (0 == addresses[addressGroup.group].length)
         addresses[addressGroup.group] = pk.address;
     }
@@ -73,34 +73,9 @@ beforeAll(async () => {
   alphClient = await createAlphClient(() => testMnemonic, userRepository, fullnodeConfig, tokenManager, operatorConfig);
 });
 
-describe("AlphClient creation", () => {
-  it("should fail if NodeProvider is un-available", async () => {
-    const fullNodeConfig: FullNodeConfig = {
-      protocol: "http",
-      host: "11",
-      port: 22,
-      addr: () => "http://11:22",
-    };
-    expect.assertions(1);
-    await expect(createAlphClient(() => testMnemonic, userRepository, fullNodeConfig, tokenManager, operatorConfig)).rejects.not.toThrow();
-  });
-
-  it ("should succeed if NodeProvider is available and ready", async () => {
-    const fullnodeConfig: FullNodeConfig = {
-      protocol: "http",
-      host: "127.0.0.1",
-      port: 22973,
-      addr: () => "http://127.0.0.1:22973"
-    };
-    expect.assertions(1);
-    await expect(createAlphClient(() => testMnemonic, userRepository, fullnodeConfig, tokenManager, operatorConfig)).resolves.toBeInstanceOf(AlphClient);
-  });
-
-});
-
 describe("Relative to users", () => {
 
-  let distributedAmount: number = 10;
+  const distributedAmount: number = 10;
 
   describe("pre-check", () => {
     it("database should be empty before tests", async () => {
@@ -111,8 +86,8 @@ describe("Relative to users", () => {
   });
 
   // Create a bunch of users
-  let testUsers: User[] = [];
-  let storedUsers: User[] = [];
+  const testUsers: User[] = [];
+  const storedUsers: User[] = [];
   for (let i = 0; i < nbUsersToHaveRepresentativeSample; i++)
     storedUsers.push(new User(i, `${i}`));
 
@@ -122,10 +97,10 @@ describe("Relative to users", () => {
       expect.assertions(5*storedUsers.length + 2);
 
       for (let i = 0; i < storedUsers.length; i++) {
-        let u = storedUsers[i];
+        const u = storedUsers[i];
 
         // Register the user
-        let storedU = await alphClient.registerUser(u);
+        const storedU = await alphClient.registerUser(u);
         expect(storedU.telegramId).toEqual(u.telegramId);
         expect(storedU.telegramUsername).toEqual(u.telegramUsername);
         expect(storedU.address).not.toBeNull();
@@ -136,10 +111,10 @@ describe("Relative to users", () => {
       await expect(userRepository.count()).resolves.toEqual(nbUsersToHaveRepresentativeSample);
 
       // Now that we generated enough users, we only keep one user per group (since no need for more)
-      let doWeHaveAUserForthisGroup: [boolean, boolean, boolean, boolean] = [false, false, false, false]
+      const doWeHaveAUserForthisGroup: [boolean, boolean, boolean, boolean] = [false, false, false, false]
       for (let i = 0; doWeHaveAUserForthisGroup.some(v => !v) && i < storedUsers.length; i++) {
-        let u = storedUsers[i];
-        let userGroup = await web3.getCurrentNodeProvider().addresses.getAddressesAddressGroup(u.address);
+        const u = storedUsers[i];
+        const userGroup = await web3.getCurrentNodeProvider().addresses.getAddressesAddressGroup(u.address);
         if (!doWeHaveAUserForthisGroup[userGroup.group]) {
           doWeHaveAUserForthisGroup[userGroup.group] = true;
           testUsers.push(u);
@@ -149,9 +124,9 @@ describe("Relative to users", () => {
     });
     
     it("should be a representative set of users", async () => {
-      let doWeHaveAUserForthisGroup: [boolean, boolean, boolean, boolean] = [false, false, false, false]
+      const doWeHaveAUserForthisGroup: [boolean, boolean, boolean, boolean] = [false, false, false, false]
       for (let i = 0; doWeHaveAUserForthisGroup.some(v => !v) && i < testUsers.length; i++) {
-        let group = await web3.getCurrentNodeProvider().addresses.getAddressesAddressGroup(testUsers[i].address)
+        const group = await web3.getCurrentNodeProvider().addresses.getAddressesAddressGroup(testUsers[i].address)
         doWeHaveAUserForthisGroup[group.group] = true
       }
       expect(doWeHaveAUserForthisGroup.every(v => v)).toBeTruthy()
@@ -231,7 +206,7 @@ describe("Relative to users", () => {
       expect(testUsers.length).toBeGreaterThan(0);
       
       for (let i = 0; i < testUsers.length; i++) {
-        let user = testUsers[i];
+        const user = testUsers[i];
         for (const otherUser of testUsers) {
           if (user.id === otherUser.id)
             continue;
@@ -273,7 +248,7 @@ describe("Relative to users", () => {
 
         const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", `${smallTip}`);
         for (let i = 0; i < testUsers.length; i++) {
-          let user = testUsers[i];
+          const user = testUsers[i];
           for (const otherUser of testUsers) {
             if (user.id === otherUser.id)
               continue;

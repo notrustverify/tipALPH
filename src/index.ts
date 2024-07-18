@@ -19,7 +19,7 @@ initializationDBMutex.waitForUnlock()
 .then(async () => {
   const tokenManager = new TokenManager(tokenRepository);
 
-  const alphClient = await createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode, tokenManager);
+  const alphClient = await createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode, tokenManager, EnvConfig.operator);
 
   runTelegram(alphClient, userRepository, tokenManager);
 })

@@ -44,7 +44,7 @@ function sumSimilarTokenAmounts(tokenAmounts: TokenAmount[]): TokenAmount {
     if (0 === tokenAmounts.length)
         return undefined;
 
-    return tokenAmounts.reduce((prevTA, currTA, currIndex, listOfTA) => {
+    return tokenAmounts.reduce((prevTA, currTA) => {
         return new TokenAmount(prevTA.amount + currTA.amount, prevTA.token);
     }, new TokenAmount(BigInt(0), tokenAmounts[0].token));
 }

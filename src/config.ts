@@ -6,22 +6,22 @@ const MNEMONIC_FILE = "bot_mnemonic.txt";
 const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 
 // Adapted from https://stackoverflow.com/a/16259739
-(function(){
-  if(console.log){
-      var old = console.log;
-      console.log = function(){
-          Array.prototype.unshift.call(arguments, new Date());
-          old.apply(this, arguments)
+(() => {
+  if(console.log) {
+      const old = console.log;
+      console.log = (...args) => {
+          Array.prototype.unshift.call(args, new Date());
+          old.apply(this, args)
       }
   }  
 })();
 
-(function(){
-  if(console.error){
-      var old = console.error;
-      console.error = function(){
-          Array.prototype.unshift.call(arguments, new Date());
-          old.apply(this, arguments)
+(() => {
+  if(console.error) {
+      const old = console.error;
+      console.error = (...args) => {
+          Array.prototype.unshift.call(args, new Date());
+          old.apply(this, args)
       }
   }  
 })();
@@ -43,7 +43,7 @@ const enum NETWORK {
   DEVNET = "devnet",
   TESTNET = "testnet",
   MAINNET = "mainnet"
-};
+}
 const NETWORKS = [NETWORK.DEVNET, NETWORK.TESTNET, NETWORK.MAINNET];
 
 export const EnvConfig = {
@@ -95,7 +95,7 @@ export const EnvConfig = {
 } as const;
 
 export const readMnemonic = () => {
-  for (let secretFolder of SECRET_FOLDER) {
+  for (const secretFolder of SECRET_FOLDER) {
     const secretFile = `${secretFolder}/${MNEMONIC_FILE}`;
     if (existsSync(secretFile))
       return readFileSync(secretFile, {flag: 'r', encoding: 'utf8'});

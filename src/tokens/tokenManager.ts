@@ -10,6 +10,11 @@ import { groupBy } from "../utils.js";
 
 export const ALPHSymbol = "ALPH";
 
+interface TokenList {
+    "networkId": number,
+    "tokens": Token[],
+}
+
 export class TokenManager {
     private readonly tokenRepository: Repository<Token>;
     private readonly updateTokenMutex: Mutex;
@@ -72,15 +77,15 @@ export class TokenManager {
 
     async updateTokenListAsHTML(tokens: Array<Token>) {
         this.tokenListAsHTML = Object.entries(groupBy(tokens, t => t.symbol[0].toLowerCase())).sort((e1, e2) => e1[0].localeCompare(e2[0]))
-        .map(([_, tl]: [string, Token[]]) => " &#8226; " + 
+        .map(([, tl]: [string, Token[]]) => " &#8226; " + 
             tl.sort((t1, t2) => t1.symbol.localeCompare(t2.symbol))
             .map(t => `$${t.symbol}`)
             .join(", ")
         ).join("\n");
     }
 
-    private getTokenList(tokenListJson: any): Array<Object> {
-        return "tokens" in tokenListJson ? tokenListJson.tokens : Array<Object>()
+    private getTokenList(tokenListJson: unknown): Token[] {
+        return typeof tokenListJson === "object" && "tokens" in tokenListJson ? (<TokenList>tokenListJson).tokens : []
     }
 
     async updateTokenDB() {
@@ -101,7 +106,7 @@ export class TokenManager {
         const tokensListURL = `https://github.com/alephium/token-list/raw/master/tokens/${EnvConfig.network}.json`;
         const tokensListReq = await fetch(tokensListURL);
         const tokensList = await tokensListReq.json();
-        const tokens = this.getTokenList(tokensList).map((t: any) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI)) as Array<Token>;
+        const tokens = this.getTokenList(tokensList).map((t: Token) => new Token(t.id, t.name, t.symbol, t.decimals, t.description, t.logoURI)) as Array<Token>;
         const ret = await this.tokenRepository.save(tokens);
         console.log(`Updated ${ret.length} tokens (${nbTokens} before)`);
 
