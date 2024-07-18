@@ -470,9 +470,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   });
 
   bot.use(async (ctx: Context<Typegram.Update>, next) => {
-    console.time(`Processing update ${ctx.update.update_id} from ${ctx.from.id}`);
+    const t0 = performance.now()
     await next() // runs next middleware
-    console.timeEnd(`Processing update ${ctx.update.update_id} from ${ctx.from.id}`);
+    const t1 = performance.now()
+    console.log(`Processing update ${ctx.update.update_id} from user id ${ctx.from.id} (${(t1-t0).toFixed(3)} ms)`)
   });
 
   /**

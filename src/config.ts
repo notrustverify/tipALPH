@@ -7,23 +7,25 @@ const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
 
 // Adapted from https://stackoverflow.com/a/16259739
 (() => {
-  if(console.log) {
-      const old = console.log;
-      console.log = (...args) => {
-          Array.prototype.unshift.call(args, new Date());
-          old.apply(this, args)
-      }
-  }  
-})();
-
-(() => {
-  if(console.error) {
-      const old = console.error;
-      console.error = (...args) => {
-          Array.prototype.unshift.call(args, new Date());
-          old.apply(this, args)
-      }
-  }  
+  const consoleModes = ["error", "warn", "log"];
+  const consoleColor = ["\x1b[31m", "\x1b[33m", ""];
+  for (let i = 0; i < consoleModes.length; i++) {
+    const mode = consoleModes[i];
+    if (console[mode]) {
+      const old = console[mode];
+      console[mode] = (...args: unknown[]) => {
+        if (0 < consoleColor[i].length) {
+          // Adding coloration tag at first element
+          args[0] = `${consoleColor[i]}${args[0]}`;
+          // Adding de-coloration tag at last element
+          const lastIndex = args.length-1;
+          args[lastIndex] = `${args[lastIndex]}\x1b[0m`;
+        }
+        Array.prototype.unshift.call(args, new Date());
+        old.apply(this, args)
+      }  
+    }
+  }
 })();
 
 export interface FullNodeConfig {
