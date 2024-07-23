@@ -4,6 +4,7 @@ import * as bip39 from "bip39";
 import "reflect-metadata"; // Required by Typeorm
 import * as dotenv from "dotenv";
 import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
+import { deriveHDWalletPrivateKeyForGroup, PrivateKeyWallet } from "@alephium/web3-wallet";
 
 import { testNodeWallet } from "@alephium/web3-test";
 
@@ -15,7 +16,6 @@ import { Token } from "../../src/db/token";
 import { TokenManager } from "../../src/tokens/tokenManager";
 import { roundToThreeDecimals } from "../utils";
 import { TokenAmount } from "../../src/tokens/tokenAmount";
-import { deriveHDWalletPrivateKey, PrivateKeyWallet } from "@alephium/web3-wallet";
 
 dotenv.config();
 
@@ -59,11 +59,10 @@ beforeAll(async () => {
     const otherMnemonic = bip39.generateMnemonic(256);
     const addresses: [string, string, string, string] = ["", "", "", ""];
     
-    for (let i = 0; addresses.some(p => p.length == 0); i++) {
-      const pk = new PrivateKeyWallet({ privateKey: deriveHDWalletPrivateKey(otherMnemonic, 'default', i), nodeProvider: nodeProvider });
-      const addressGroup = await nodeProvider.addresses.getAddressesAddressGroup(pk.address);
-      if (0 == addresses[addressGroup.group].length)
-        addresses[addressGroup.group] = pk.address;
+    for (let i = 0; i < 4; i++) {
+      let privateKey = deriveHDWalletPrivateKeyForGroup(otherMnemonic, i, 'default', i);
+      const pkw = new PrivateKeyWallet({ privateKey: privateKey[0], nodeProvider: nodeProvider });
+      addresses[i] = pkw.address;
     }
 
     return addresses;

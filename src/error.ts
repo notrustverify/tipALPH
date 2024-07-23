@@ -83,7 +83,7 @@ export class NotEnoughALPHForTransactionOutputError extends AlphAPIError {
   }
 }
 
-const notEnoughFundsRegex = /^\[API Error\] - Not enough balance: got (\d+), expected (\d+)$/;
+const notEnoughFundsRegex = /^\[API Error\] - Not enough balance: got (\d+), expected (\d+).*$/;
 export function alphErrorIsNotEnoughFundsError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughFundsError: instead got", err);
