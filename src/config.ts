@@ -39,6 +39,7 @@ export interface FullNodeConfig {
 export interface OperatorConfig {
   readonly fees: number
   readonly addressesByGroup: readonly [string, string, string, string]
+  readonly strictMinimalWithdrawalAmount: number
 }
 
 const enum NETWORK {
@@ -86,6 +87,7 @@ export const EnvConfig = {
         process.env.OPERATOR_WALLET_ADDRESS_G2 as string,
         process.env.OPERATOR_WALLET_ADDRESS_G3 as string,
     ],
+    strictMinimalWithdrawalAmount: Number(process.env.STRICT_MINIMAL_WITHDRAWAL_AMOUNT as string || "0.05"),
   },
   bot: {
     nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),

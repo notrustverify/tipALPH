@@ -1,9 +1,8 @@
-import { prettifyAttoAlphAmount } from "@alephium/web3";
 import { Telegraf, Context, Composer } from "telegraf";
 import * as Typegram from "telegraf/types";
 import { Repository } from "typeorm";
 
-import { AlphAPIError, ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError } from "../error.js";
+import { AlphAmountOverflowError, AlphAPIError, AlphApiIOError, ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError, TooSmallALPHWithdrawalError } from "../error.js";
 import { ALPHSymbol, TokenManager } from "../tokens/tokenManager.js";
 import { TransactionStatus } from "../transactionStatus.js";
 import { TokenAmount } from "../tokens/tokenAmount.js";
@@ -11,6 +10,7 @@ import { Command } from "./commands/command.js";
 import { AlphClient } from "../services/alephium.js";
 import { EnvConfig } from "../config.js";
 import { User } from "../db/user.js";
+import { DUST_AMOUNT, prettifyAttoAlphAmount } from "@alephium/web3";
 
 let bot: Telegraf;
 
@@ -232,7 +232,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       return;
     }
 
-    // As AlphClient only allow for . as delimiter
+    // As AlphClient only allows for . as delimiter
     amountAsString = amountAsString.replace(",", ".");
 
     console.log(`${sender.telegramId} tips ${tokenAmount.toString()} to ${receiver.telegramId} (Motive: "${reason}")`);
@@ -262,6 +262,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       if (err instanceof NetworkError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
       }
+      if (err instanceof AlphApiIOError) {
+        console.error(err.message);
+        ctx.telegram.sendMessage(sender.telegramId, "Oops. It seems that a someone twisted a cable somewhere. You should try again, it might work now. If not, please reach us!");
+      }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
         const requiredTokenAmount = new TokenAmount(err.requiredFunds(), tokenAmount.token);
@@ -270,11 +274,15 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       }
       else if (err instanceof NotEnoughBalanceForFeeError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
-        ctx.telegram.sendMessage(sender.telegramId, `You do not have enough balance to handle the gas fees. You can maybe try again with a lower amount.`);
+        ctx.telegram.sendMessage(sender.telegramId, `You do not have enough balance to handle the gas fees. You can maybe try again with a lower amount`);
+      }
+      else if (err instanceof AlphAmountOverflowError) {
+        console.error(err);
+        ctx.telegram.sendMessage(sender.telegramId, "It seems that you are trying to tip too large amounts. Try with smaller one!\nP.S.: You should not have that much on your account btw...");
       }
       else if (err instanceof NotEnoughALPHForTransactionOutputError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
-        ctx.telegram.sendMessage(sender.telegramId, `You do not have enough $ALPH to make that transaction.`);        
+        ctx.telegram.sendMessage(sender.telegramId, `You cannot tip less than ${prettifyAttoAlphAmount(DUST_AMOUNT)} $ALPH`);
       }
       else if (err instanceof NotEnoughALPHForALPHAndTokenChangeOutputError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
@@ -282,7 +290,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       }
       else if (err instanceof NotEnoughALPHForTokenChangeOutputError) {
         console.error(genLogMessageErrorWhile("tipping", err.message, sender));
-        ctx.telegram.sendMessage(sender.telegramId, "You cannot make that tip since you need to keep funds to take out your $ALPH and token.");
+        ctx.telegram.sendMessage(sender.telegramId, "You cannot make that tip since you need to keep funds to take out your $ALPH and token");
       }
       else {
         console.error(new GeneralError("failed to tip", {
@@ -359,7 +367,17 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       }
       else if (err instanceof NotEnoughFundsError) {
         console.error(genLogMessageErrorWhile("withdrawal", err.message, sender));
-        ctx.sendMessage(`You cannot withdraw ${prettifyAttoAlphAmount(err.requiredFunds())} ALPH, since you only have ${prettifyAttoAlphAmount(err.actualFunds())} ALPH`, { reply_parameters: { message_id: ctx.message.message_id } });
+        const requiredTokenAmount = new TokenAmount(err.requiredFunds(), tokenAmount.token);
+        const actualTokenAmount = new TokenAmount(err.actualFunds(), tokenAmount.token);
+        ctx.sendMessage(`You cannot withdraw ${requiredTokenAmount.toString()}, since you only have ${actualTokenAmount.toString()}`, { reply_parameters: { message_id: ctx.message.message_id } });
+      }
+      else if (err instanceof TooSmallALPHWithdrawalError) {
+        console.error(genLogMessageErrorWhile("tipping", err.message, sender));
+        ctx.telegram.sendMessage(sender.telegramId, `You have to withdraw more than ${EnvConfig.operator.strictMinimalWithdrawalAmount} $ALPH.`);
+      }
+      else if (err instanceof AlphAmountOverflowError) {
+        console.error(err);
+        ctx.telegram.sendMessage(sender.telegramId, "It seems that you are trying to withdraw too large amounts. Try with smaller one!\nP.S.: You should not have that much on your account btw...");
       }
       else if (err instanceof AlphAPIError) {
         console.error("API error", err);

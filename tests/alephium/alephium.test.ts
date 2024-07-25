@@ -3,7 +3,7 @@ import { DataSource, Repository } from "typeorm"
 import * as bip39 from "bip39";
 import "reflect-metadata"; // Required by Typeorm
 import * as dotenv from "dotenv";
-import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
+import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, MIN_UTXO_SET_AMOUNT, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
 import { deriveHDWalletPrivateKeyForGroup, PrivateKeyWallet } from "@alephium/web3-wallet";
 
 import { testNodeWallet } from "@alephium/web3-test";
@@ -67,7 +67,7 @@ beforeAll(async () => {
 
     return addresses;
   })());
-  operatorConfig = { fees: 3, addressesByGroup: addresses };
+  operatorConfig = { fees: 3, addressesByGroup: addresses, strictMinimalWithdrawalAmount: 0.005 };
 
   alphClient = await createAlphClient(() => testMnemonic, userRepository, fullnodeConfig, tokenManager, operatorConfig);
 });
@@ -233,7 +233,7 @@ describe("Relative to users", () => {
     });
 
     describe("should successfully send small tips", () => {
-      const smallTipsRange: number[] = [0.1, 0.08, 0.05, 0.03, 0.02, 0.01, 0.005, 0.001];
+      const smallTipsRange: number[] = [0.1, 0.08, 0.05, 0.03, 0.02, 0.01, 0.005, 0.001]; // 0.001 is the minimal value of an UTXO (ref: https://docs.alephium.org/integration/integration-more/#is-there-any-dust-limit-or-reservation)
       it.each(smallTipsRange)("of %s ALPH", async smallTip => {
         expect.assertions(testUsers.length*((testUsers.length-1) + 3) + 1);
         expect(testUsers.length).toBeGreaterThan(0);
@@ -245,7 +245,7 @@ describe("Relative to users", () => {
           initialBalance.push(userBalance[0].amountAsNumber());
         }
 
-        const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", `${smallTip}`);
+        const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", smallTip.toString());
         for (let i = 0; i < testUsers.length; i++) {
           const user = testUsers[i];
           for (const otherUser of testUsers) {
@@ -301,7 +301,7 @@ describe("Relative to users", () => {
         const feeAddressBalance = await nodeProvider.addresses.getAddressesAddressBalance(operatorConfig.addressesByGroup[i]);
         // We expect a variation between what is expected and what is really taken
         const diffBetweenActualAndExpectation = number256ToNumber(feeAddressBalance.balance, nbALPHDecimals) - expectedAmount;
-        console.warn(`Fee address ${i}: expected: ${expectedAmount}, observed: ${number256ToNumber(feeAddressBalance.balance, nbALPHDecimals)}`)
+        //console.warn(`Fee address ${i}: expected: ${expectedAmount}, observed: ${number256ToNumber(feeAddressBalance.balance, nbALPHDecimals)}`)
         expect(Math.abs(diffBetweenActualAndExpectation)).toBeLessThanOrEqual(withdrawAmount/2);  // TODO: find better bound
       }
 
@@ -313,50 +313,80 @@ describe("Relative to users", () => {
         const expectedAmount = initialBalance[i] - testUsers.length*withdrawAmount + testUsers.length*(withdrawAmount - DEFAULT_GAS_ALPH_AMOUNT - operatorFeeTokenAmount.amountAsNumber());
         // explication:       
         const diffBetweenActualAndExpectation = userBalance[0].amountAsNumber() - expectedAmount;
-        console.warn(`User ${i}: expected: ${expectedAmount}, observed: ${userBalance[0].amountAsNumber()}`);
+        //console.warn(`User ${i}: expected: ${expectedAmount}, observed: ${userBalance[0].amountAsNumber()}`);
         expect(Math.abs(diffBetweenActualAndExpectation)).toBeLessThanOrEqual(withdrawAmount/2);   // TODO: find better bound
         expect(userBalance[0].token.isALPH()).toBeTruthy();
       }
     });
 
-    /*
     describe("should be able to withdraw small amounts", () => {
-      const smallAmounts: number[] = [0.1, 0.08, 0.05, 0.03, 0.02, 0.01];
-      it.each(smallAmounts)("of %s ALPH", async withdrawAmount => {
+      const smallWithdrawAmounts: number[] = [0.1, 0.08, 0.07, 0.06];
+
+      it.each(smallWithdrawAmounts)("of %s ALPH", async withdrawAmount => {
+        expect.assertions(2 + testUsers.length*(testUsers.length + 4) + 2*operatorConfig.addressesByGroup.length);
+        expect(operatorConfig.addressesByGroup.length).toEqual(4);
         expect(testUsers.length).toBeGreaterThan(0);
 
         // Check the initial balance before test
         const initialBalance: number[] = [];
         for (const user of testUsers) {
           const userBalance = await alphClient.getUserBalance(user);
+          expect(userBalance[0].amountAsNumber()).toBeGreaterThan(withdrawAmount*2 + DEFAULT_GAS_ALPH_AMOUNT*3);  // Random bound
           initialBalance.push(userBalance[0].amountAsNumber());
         }
-        
-        for (const withdrawAmount of smallWithdrawAmounts) {
-          const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", `${withdrawAmount}`);
 
-          for (let i = 0; i < testUsers.length; i++) {
-            let user = testUsers[i];
-            for (const otherUser of testUsers) {
-              if (user.id === otherUser.id)
-                continue;
-              await expect(alphClient.sendAmountToAddressFrom(user, tokenAmount, otherUser.address)).resolves.toMatch(/.+/);
-            }
-          }
+        const nodeProvider = web3.getCurrentNodeProvider();
+        const nbALPHDecimals = (await tokenManager.getAlphToken()).decimals;
+        const initialFeeAddressBalance: number[] = [];
+        // Ensure that no fee has been taken so far
+        for (const feeAddress of operatorConfig.addressesByGroup) {
+          const feeAddressBalance = await nodeProvider.addresses.getAddressesAddressBalance(feeAddress);
+          expect(number256ToNumber(feeAddressBalance.balance, nbALPHDecimals)).toBeGreaterThan(0); // TODO: tests should be independant and this should be equal to 0
+          initialFeeAddressBalance.push(number256ToNumber(feeAddressBalance.balance, nbALPHDecimals));
+        }
+        
+        const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", withdrawAmount.toString());
+        const operatorFeeTokenAmount = tokenAmount.getPercentage(operatorConfig.fees);
+        //console.warn(`Collected ${operatorFeeTokenAmount.toString()} as operator!`);
+
+        for (const user of testUsers)
+          for (const otherUser of testUsers)
+            await expect(alphClient.sendAmountToAddressFrom(user, tokenAmount, otherUser.address)).resolves.toMatch(/.+/);
+
+        // Check if operator correctly took its fees
+        for (let i = 0; i < operatorConfig.addressesByGroup.length; i++) {
+          const expectedAmount = testUsers.length*(operatorFeeTokenAmount.amountAsNumber());
+          
+          const feeAddressBalance = await nodeProvider.addresses.getAddressesAddressBalance(operatorConfig.addressesByGroup[i]);
+          // We expect a variation between what is expected and what is really taken
+          const diffBetweenActualAndExpectation = number256ToNumber(feeAddressBalance.balance, nbALPHDecimals) - initialFeeAddressBalance[i] - expectedAmount;
+          //console.warn(`Fee address ${i}: expected: ${expectedAmount}, observed: ${number256ToNumber(feeAddressBalance.balance, nbALPHDecimals)}`);
+          expect(Math.abs(diffBetweenActualAndExpectation)).toBeLessThanOrEqual(withdrawAmount/2);  // TODO: find better bound
         }
 
-        // Everyone should just have lost the gaz fee
+        // Everyone should just have lost the gaz and operator fee
         for (let i = 0; i < testUsers.length; i++) {
           // check user balance
           const userBalance = await alphClient.getUserBalance(testUsers[i]);
           expect(userBalance.length).toEqual(1);
-          const expectedAmount = initialBalance[i] - smallWithdrawAmounts.map(v => (testUsers.length-1)*(DEFAULT_GAS_ALPH_AMOUNT + v*EnvConfig.operator.fees)).reduce((p: number, c: number) => p+c, 0.0);
-          // explication:      amountBeforeTipping - sum of (forEach amount: (operator percentage and the gaz fees) * number of addresses withdrawn to)
-          expect(userBalance[0].amountAsNumber()).toEqual(roundToSixDecimals(expectedAmount));
+          const expectedAmount = initialBalance[i] - testUsers.length*withdrawAmount + testUsers.length*(withdrawAmount - DEFAULT_GAS_ALPH_AMOUNT - operatorFeeTokenAmount.amountAsNumber());
+          // explication:       
+          const diffBetweenActualAndExpectation = userBalance[0].amountAsNumber() - expectedAmount;
+          //console.warn(`User ${i}: expected: ${expectedAmount}, observed: ${userBalance[0].amountAsNumber()}`);
+          expect(Math.abs(diffBetweenActualAndExpectation)).toBeLessThanOrEqual(withdrawAmount/2);   // TODO: find better bound
           expect(userBalance[0].token.isALPH()).toBeTruthy();
         }
+
       });
     });
-    */
+
+    it("should not allow to withdraw amounts smaller than tolerated", async () => {
+      expect.assertions(testUsers.length*testUsers.length);
+
+      const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol("ALPH", operatorConfig.strictMinimalWithdrawalAmount.toString());
+      for (const user of testUsers)
+        for (const otherUser of testUsers)
+          await alphClient.sendAmountToAddressFrom(user, tokenAmount, otherUser.address).catch(err => expect(err.message).toMatch(/too small withdrawal amount/));
+    });
   });
 });

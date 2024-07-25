@@ -31,7 +31,7 @@ export class TokenAmount {
         return number256ToNumber(this.amount, this.token.decimals);
     }
 
-    public toString = () : string => `${prettifyTokenAmount(this.amount, this.token.decimals).replaceAll(",", "'")} $${this.token.symbol}`;
+    public toString = () : string => `${prettifyTokenAmount(this.amount, this.token.decimals)!.replaceAll(",", "'")} $${this.token.symbol}`;
 
     public toJSON(): string {
         return JSON.stringify(this);

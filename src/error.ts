@@ -1,6 +1,8 @@
 import { Number256 } from "@alephium/web3";
 
 import { User } from "./db/user.js";
+import { TokenAmount } from "./tokens/tokenAmount.js";
+import { Token } from "./db/token.js";
 
 export enum ErrorTypes {
     UN_INITIALIZED_WALLET = "It seems that you haven't initialized your wallet yet. Hit `Start` in DM with me to do it!",
@@ -53,7 +55,37 @@ export class AlphAPIError extends GeneralError {
   }
 }
 
-const notEnoughBalanceForFeeRegex = /^\[API Error\] - Not enough balance for fee, maybe transfer a smaller amount$/;
+const alphApiFailureIO = /^\[API Error\] - Failed in IO:/;
+export function alphErrorIsIOFailureError(err: Error): boolean {
+  if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
+    console.error("Expected AlphApiIOError: instead got", err);
+    return false;
+  }
+  return null !== alphApiFailureIO.exec(err.message);
+}
+
+export class AlphApiIOError extends AlphAPIError {
+  constructor(error: Error) {
+    super("alph api failed io error", { error });
+  }
+}
+
+const alphAmountOverflow = /^\[API Error\] - ALPH amount overflow/;
+export function alphErrorIsAlphAmountOverflowError(err: Error): boolean {
+  if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
+    console.error("Expected AlphAmountOverflowError: instead got", err);
+    return false;
+  }
+  return null !== alphAmountOverflow.exec(err.message);
+}
+
+export class AlphAmountOverflowError extends AlphAPIError {
+  constructor(error: Error) {
+    super("alph amount error", { error });
+  }
+}
+
+const notEnoughBalanceForFeeRegex = /^\[API Error\] - Not enough balance for fee, maybe transfer a smaller amount/;
 export function alphErrorIsNotEnoughBalanceForFeeError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughBalanceForFeeError: instead got", err);
@@ -68,7 +100,7 @@ export class NotEnoughBalanceForFeeError extends AlphAPIError {
   }
 }
 
-const notEnoughALPHForTransactionOutput = /^\[API Error\] - Not enough ALPH for transaction output$/;
+const notEnoughALPHForTransactionOutput = /^\[API Error\] - Not enough ALPH for transaction output/;
 export function alphErrorIsNotEnoughALPHForTransactionOutputError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughALPHForTransactionOutputError: instead got", err);
@@ -83,7 +115,7 @@ export class NotEnoughALPHForTransactionOutputError extends AlphAPIError {
   }
 }
 
-const notEnoughFundsRegex = /^\[API Error\] - Not enough balance: got (\d+), expected (\d+).*$/;
+const notEnoughFundsRegex = /^\[API Error\] - Not enough balance: got (\d+), expected (\d+)/;
 export function alphErrorIsNotEnoughFundsError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughFundsError: instead got", err);
@@ -95,6 +127,7 @@ export function alphErrorIsNotEnoughFundsError(err: Error): boolean {
 
 export class NotEnoughFundsError extends AlphAPIError {
   constructor(error: Error) {
+    console.warn(error);
     const args = notEnoughFundsRegex.exec(error.message)!;
     super("not enough funds error", { error, context: { actualFunds: args[1], requiredFunds: args[2] } });
   }
@@ -108,7 +141,7 @@ export class NotEnoughFundsError extends AlphAPIError {
   }
 }
 
-const notEnoughALPHForALPHAndTokenChangeOutput = /^\[API Error\] - Not enough ALPH for ALPH and token change output, expected (\d+), got (\d+)$/;
+const notEnoughALPHForALPHAndTokenChangeOutput = /^\[API Error\] - Not enough ALPH for ALPH and token change output, expected (\d+), got (\d+)/;
 export function alphErrorIsNotEnoughALPHForALPHAndTokenChangeOutputError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughALPHForALPHAndTokenChangeOutputError: instead got", err);
@@ -135,7 +168,7 @@ export class NotEnoughALPHForALPHAndTokenChangeOutputError extends AlphAPIError 
   }
 }
 
-const notEnoughALPHForTokenChangeOutputRegex = /^\[API Error\] - Not enough ALPH for token change output, expected (\d+), got (\d+)$/;
+const notEnoughALPHForTokenChangeOutputRegex = /^\[API Error\] - Not enough ALPH for token change output, expected (\d+), got (\d+)/;
 export function alphErrorIsNotEnoughALPHForTokenChangeOutputError(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughALPHForTokenChangeOutputError: instead got", err);
@@ -162,7 +195,7 @@ export class NotEnoughALPHForTokenChangeOutputError extends AlphAPIError {
   }
 }
 
-const notEnoughApprovedBalanceForAddress = /^\[API Error\] - Execution error when estimating gas for tx script or contract: Not enough approved balance for address ([\d|\w]+), tokenId: (\w+), expected: (\d+), got: (\d+)$/;
+const notEnoughApprovedBalanceForAddress = /^\[API Error\] - Execution error when estimating gas for tx script or contract: Not enough approved balance for address ([\d|\w]+), tokenId: (\w+), expected: (\d+), got: (\d+)/;
 export function alphErrorIsNotEnoughApprovedBalanceForAddress(err: Error): boolean {
   if (!(err instanceof Error) || !("message" in err) || undefined === err.message) {
     console.error("Expected NotEnoughApprovedBalanceForAddressError: instead got", err);
@@ -204,5 +237,15 @@ export class InvalidAddressError extends GeneralError {
 
   invalidAddress(): string {
     return this.context["invalidAddress"];
+  }
+}
+
+export class TooSmallALPHWithdrawalError extends GeneralError {
+  constructor(withdrawalTokenAmount: TokenAmount) {
+    super("too small withdrawal amount", { context: { withdrawalTokenAmount } });
+  }
+
+  withdrawalAmount(): number {
+    return this.context["withdrawalTokenAmount"];
   }
 }

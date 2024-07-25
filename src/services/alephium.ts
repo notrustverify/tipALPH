@@ -1,4 +1,4 @@
-import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress } from "@alephium/web3";
+import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, MIN_UTXO_SET_AMOUNT } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
 import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
@@ -75,6 +75,10 @@ export class AlphClient {
   private adaptError(err: Error): Error {
     if (Error.alphErrorIsNetworkError(err))
       return new Error.NetworkError(err);
+    else if (Error.alphErrorIsIOFailureError(err))
+      return new Error.AlphApiIOError(err);
+    else if (Error.alphErrorIsAlphAmountOverflowError(err))
+      return new Error.AlphAmountOverflowError(err);
     else if (Error.alphErrorIsNotEnoughFundsError(err))
       return new Error.NotEnoughFundsError(err);
     else if (Error.alphErrorIsNotEnoughBalanceForFeeError(err))
@@ -151,6 +155,8 @@ export class AlphClient {
   async sendAmountToAddressFrom(user: User, tokenAmount: TokenAmount, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
     if (!isValidAddress(destinationAddress))
       return Promise.reject(new Error.InvalidAddressError(destinationAddress));
+    if (tokenAmount.token.isALPH() && tokenAmount.amountAsNumber() <= this.operatorConfig.strictMinimalWithdrawalAmount)
+      return Promise.reject(new Error.TooSmallALPHWithdrawalError(tokenAmount))
 
     const userWallet = this.getUserWallet(user);
 
