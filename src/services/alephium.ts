@@ -1,4 +1,4 @@
-import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, MIN_UTXO_SET_AMOUNT } from "@alephium/web3";
+import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, waitForTxConfirmation, codec, DEFAULT_GAS_ALPH_AMOUNT } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
 import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
@@ -10,7 +10,7 @@ import { TransactionStatus } from "../transactionStatus.js";
 import { EnvConfig, FullNodeConfig, OperatorConfig } from "../config.js";
 import * as Error from "../error.js";
 import { User } from "../db/user.js";
-import { delay } from "../utils.js";
+import { Token } from "../db/token.js";
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -29,7 +29,8 @@ export class AlphClient {
     this.registerMutex = new Mutex();
   }
 
-  private async waitTxConfirmed(txId: string, nbConfirmations: number, timeIntervallInMilliseconds: number): Promise<boolean> {
+  /*
+  private async waitForTxConfirmation(txId: string, nbConfirmations: number, timeIntervallInMilliseconds: number): Promise<boolean> {
     let txStatus: Confirmed | MemPooled | TxNotFound
 
     for(;;) { // Equivalent of while(true) but satisfies the linter
@@ -52,6 +53,7 @@ export class AlphClient {
       await delay(timeIntervallInMilliseconds);
     }
   }
+  */
 
   async registerUser(newUser: User): Promise<User> {
     return this.registerMutex.runExclusive(async () => { // Should use Result<> instead of returning error when user already exists.
@@ -112,9 +114,12 @@ export class AlphClient {
     return userBalance;
   }
 
-  async getUserBalance(user: User): Promise<UserBalance> {
+  async getUserBalance(user: User, token?: Token): Promise<UserBalance> {
     return this.nodeProvider.addresses.getAddressesAddressBalance(user.address)
     .then(balance => this.convertAddressBalanceToUserBalance(balance))
+    .then(balance => {  // If token is provided, we filter the balance to only return the token
+      return undefined === token ? balance : balance.filter(t => t.token.id === token.id)
+    })
     .catch(err => {
       if (Error.alphErrorIsNetworkError(err))
         return Promise.reject(new Error.NetworkError(err));
@@ -143,11 +148,12 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await this.waitTxConfirmed(newTx.txId, EnvConfig.bot.nbConfirmationsInternalTransfer, 1000);
+    await waitForTxConfirmation(newTx.txId, EnvConfig.bot.nbConfirmationsInternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(sender).catch(console.error);
-    this.consolidateIfRequired(receiver).catch(console.error);
+    if (sender.id !== receiver.id)
+      this.consolidateIfRequired(receiver).catch(console.error);
 
     return newTx.txId;
   }
@@ -188,12 +194,62 @@ export class AlphClient {
     if (undefined !== txStatus && !EnvConfig.isOnDevNet())
       txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-    await this.waitTxConfirmed(newTx.txId, EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
+    await waitForTxConfirmation(newTx.txId, EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
 
     // Check for consolidation from time to time
     this.consolidateIfRequired(user).catch(console.error);
 
     return newTx.txId;
+  }
+
+  async takeFeesAndSweepWalletFromUserTo(user: User, destinationAddress: string, txStatus?: TransactionStatus): Promise<string> {
+    if (!isValidAddress(destinationAddress))
+      return Promise.reject(new Error.InvalidAddressError(destinationAddress));
+    
+    const userWallet = this.getUserWallet(user);
+
+    // Stage 1: Take operator fees
+    if (this.operatorConfig.fees > 0) {
+      const operatorFeesAddress = this.operatorConfig.addressesByGroup[userWallet.group];
+
+      const userBalance = await this.getUserBalance(user);
+      const userBalanceAlph = userBalance.filter(u => u.token.isALPH())[0];
+
+      if (userBalanceAlph.amountAsNumber() <= (this.operatorConfig.strictMinimalWithdrawalAllAmount))  // Take some margin for user to be able to assume the sweepAll tx
+        return Promise.reject(new Error.TooSmallALPHWithdrawalError(userBalanceAlph))
+
+      const operatorFeesTokenAmount: TokenAmount[] = userBalance.map(t => t.substractAndGetPercentage(this.operatorConfig.fees));
+      operatorFeesTokenAmount.forEach(t => console.log(`Collecting ${t.toString()} (${this.operatorConfig.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`));
+      
+      const newTx = await userWallet.signAndSubmitTransferTx({
+        signerAddress: (await userWallet.getSelectedAccount()).address,
+        destinations: [{
+          address: operatorFeesAddress,
+          attoAlphAmount: operatorFeesTokenAmount.filter(t => t.token.isALPH)[0].amount,
+          tokens: operatorFeesTokenAmount.filter(t => !t.token.isALPH()).map(t => { return { id: t.token.id, amount: t.amount }; }),
+        }],
+      })
+      .catch((err) => Promise.reject(this.adaptError(err)));
+      
+      if (undefined !== txStatus && !EnvConfig.isOnDevNet())
+        txStatus.setTransactionId(newTx.txId).displayUpdate();
+
+      await waitForTxConfirmation(newTx.txId, EnvConfig.bot.nbConfirmationsBetweenMultipleStepsTransactions, 1000);
+    }
+
+    if (undefined !== txStatus)
+      txStatus.setConfirmed().nextStep().displayUpdate();
+
+    // Stage 2: Sweep rest of balance to external address
+    const sweepAllTx = await this.sweepWalletFromUserTo(userWallet, destinationAddress);
+    console.log(sweepAllTx);
+    
+    if (0 === sweepAllTx.length)
+      return "";
+    
+    await waitForTxConfirmation(sweepAllTx[0], EnvConfig.bot.nbConfirmationsExternalTransfer, 1000);
+
+    return sweepAllTx[0];
   }
 
   async consolidateIfRequired(user: User): Promise<string> {
@@ -213,29 +269,32 @@ export class AlphClient {
     .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
-  // Inspired from https://github.com/alephium/alephium-web3/blob/master/test/exchange.test.ts#L60
-  async consolidateUTXO(userWallet: PrivateKeyWallet): Promise<string[]> {
+  async sweepWalletFromUserTo(userWallet: PrivateKeyWallet, destinationAddress: string): Promise<string[]> {
     return this.nodeProvider.transactions.postTransactionsSweepAddressBuild({
       fromPublicKey: userWallet.publicKey,
-      toAddress: userWallet.address,
+      toAddress: destinationAddress,
     })
     .then(sweepResults => 
       sweepResults.unsignedTxs.map(tx => userWallet.signAndSubmitUnsignedTx({ signerAddress: userWallet.address, unsignedTx: tx.unsignedTx }))
     )
     .then(promises => Promise.all(promises))
-    .then(txResults => txResults.map(tx => tx.txId))
+    .then(txResults => { console.log("Tx results", txResults); return txResults.map(tx => tx.txId); })
     .catch((err) => Promise.reject(this.adaptError(err)));
+  }
+
+  // Inspired from https://github.com/alephium/alephium-web3/blob/master/test/exchange.test.ts#L60
+  async consolidateUTXO(userWallet: PrivateKeyWallet): Promise<string[]> {
+    return this.sweepWalletFromUserTo(userWallet, userWallet.address);
   }
 
   async getTotalTokenAmount(): Promise<UserBalance> {
     const totalNbrUsers = await this.userStore.count();
     let totalTokenAmount: UserBalance = [];
-    let currentUserSet: User[];
     let currentUserBalance: UserBalance[];
     
-    const userBuffer = 30;
+    const userBuffer = Math.ceil(totalNbrUsers/10);
     for (let i = 0; i < totalNbrUsers; i += userBuffer) {
-      currentUserSet = await this.userStore.find({ skip: userBuffer*i, take: userBuffer });
+      const currentUserSet = await this.userStore.find({ skip: userBuffer*i, take: userBuffer });
       currentUserBalance = await Promise.all(currentUserSet.map(u => this.getUserBalance(u)));
       currentUserBalance.push(totalTokenAmount);
       totalTokenAmount = sumUserBalance(currentUserBalance);

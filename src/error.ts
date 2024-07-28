@@ -33,7 +33,7 @@ export class GeneralError extends Error {
 }
 
 export function alphErrorIsNetworkError(value: Error): boolean {
-  return (value instanceof Error) && "message" in value && undefined !== value.message && value.message == "fetch failed";
+  return (value instanceof Error) && "message" in value && undefined !== value.message && value.message === "fetch failed";
 }
 
 export class NetworkError extends GeneralError {
@@ -46,7 +46,7 @@ const alphAPIErrorRegex = /^[API Error] - /;
 
 export function alphErrorIsAPIError(err: Error): boolean {
   const args = alphAPIErrorRegex.exec(err.message)
-  return null != args && 1 == args.length;
+  return null != args && 1 === args.length;
 }
 
 export class AlphAPIError extends GeneralError {

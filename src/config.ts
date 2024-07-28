@@ -15,11 +15,17 @@ const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
       const old = console[mode];
       console[mode] = (...args: unknown[]) => {
         if (0 < consoleColor[i].length) {
-          // Adding coloration tag at first element
-          args[0] = `${consoleColor[i]}${args[0]}`;
-          // Adding de-coloration tag at last element
-          const lastIndex = args.length-1;
-          args[lastIndex] = `${args[lastIndex]}\x1b[0m`;
+          if ("object" === typeof args[0]) {
+            Array.prototype.push.call(args, "\x1b]0m");
+            Array.prototype.unshift.call(args, consoleColor[i]);
+          }
+          else {
+            // Adding coloration tag at first element
+            args[0] = `${consoleColor[i]}${args[0]}`;
+            // Adding de-coloration tag at last element
+            const lastIndex = args.length-1;
+            args[lastIndex] = `${args[lastIndex]}\x1b[0m`;
+          }
         }
         Array.prototype.unshift.call(args, new Date());
         old.apply(this, args)
@@ -40,6 +46,7 @@ export interface OperatorConfig {
   readonly fees: number
   readonly addressesByGroup: readonly [string, string, string, string]
   readonly strictMinimalWithdrawalAmount: number
+  readonly strictMinimalWithdrawalAllAmount: number
 }
 
 const enum NETWORK {
@@ -88,11 +95,13 @@ export const EnvConfig = {
         process.env.OPERATOR_WALLET_ADDRESS_G3 as string,
     ],
     strictMinimalWithdrawalAmount: Number(process.env.STRICT_MINIMAL_WITHDRAWAL_AMOUNT as string || "0.05"),
+    strictMinimalWithdrawalAllAmount: Number(process.env.STRICT_MINIMAL_WITHDRAWAL_ALL_AMOUNT as string || "0.08"),
   },
   bot: {
     nbUTXOBeforeConsolidation: Number(process.env.NUM_UTXO_BEFORE_CONSOLIDATION as string || "50"),
     nbConfirmationsInternalTransfer: Number(process.env.NUM_CONFIRMATIONS_INTERNAL_TRANSFER as string || "1"),
     nbConfirmationsExternalTransfer: Number(process.env.NUM_CONFIRMATIONS_EXTERNAL_TRANSFER as string || "1"),
+    nbConfirmationsBetweenMultipleStepsTransactions: Number(process.env.NUM_CONFIRMATIONS_BETWEEN_MULTIPLE_STEPS_TRANSACTIONS as string || "1"),
     considerMempool: "true" === (process.env.CONSIDER_MEMPOOL as string || "false").toLowerCase(),
     onlyAllowAdmins: "true" === (process.env.ONLY_ALLOW_ADMIN as string || "false").toLowerCase(),
   }

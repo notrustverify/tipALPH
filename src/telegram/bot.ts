@@ -4,7 +4,7 @@ import { Repository } from "typeorm";
 
 import { AlphAmountOverflowError, AlphAPIError, AlphApiIOError, ErrorTypes, GeneralError, genLogMessageErrorWhile, genUserMessageErrorWhile, InvalidAddressError, NetworkError, NotEnoughALPHForALPHAndTokenChangeOutputError, NotEnoughALPHForTokenChangeOutputError, NotEnoughALPHForTransactionOutputError, NotEnoughBalanceForFeeError, NotEnoughFundsError, TooSmallALPHWithdrawalError } from "../error.js";
 import { ALPHSymbol, TokenManager } from "../tokens/tokenManager.js";
-import { TransactionStatus } from "../transactionStatus.js";
+import { genTxIdText, TransactionStatus } from "../transactionStatus.js";
 import { TokenAmount } from "../tokens/tokenAmount.js";
 import { Command } from "./commands/command.js";
 import { AlphClient } from "../services/alephium.js";
@@ -227,7 +227,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     tokenSymbol = undefined === tokenSymbol ? ALPHSymbol : tokenSymbol;
 
     const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol(tokenSymbol, amountAsString);
-    if (undefined == tokenAmount) {
+    if (undefined === tokenAmount) {
       ctx.sendMessage("The token is invalid",  { reply_parameters: { message_id: msgToReplyTo } });
       return;
     }
@@ -237,10 +237,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     console.log(`${sender.telegramId} tips ${tokenAmount.toString()} to ${receiver.telegramId} (Motive: "${reason}")`);
 
-    const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, tokenAmount);
+    const txStatus = new TransactionStatus(`@${sender.telegramUsername} tipped @${receiver.telegramUsername}`, tokenAmount.toString());
     const setResponseTo = undefined !== msgToReplyTo ? { reply_to_message_id: msgToReplyTo } : { };
     const previousReply = await ctx.sendMessage(txStatus.toString(), { parse_mode: "HTML", ...setResponseTo });
-    txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, previousReply, update)));
+    txStatus.setDisplayUpdate(async (update: string) => editLastMsgWith(ctx, previousReply, update));
 
     // Now that we know the sender, receiver and amount, we can proceed to the transfer
     alphClient.transferFromUserToUser(sender, receiver, tokenAmount, txStatus)
@@ -254,7 +254,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         ctx.sendMessage(`@${receiver.telegramUsername}!` + " You received a tip! Hit `Start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
       else if (!isReply && ctx.botInfo.id != receiver.telegramId)
-        ctx.telegram.sendMessage(receiver.telegramId, `You received ${tokenAmount.toString()} from @${sender.telegramUsername}${txStatus.genTxIdText()}`, { parse_mode: "HTML" });
+        ctx.telegram.sendMessage(receiver.telegramId, `You received ${tokenAmount.toString()} from @${sender.telegramUsername}${genTxIdText(txId)}`, { parse_mode: "HTML" });
     
     })
     .catch((err) => {
@@ -303,7 +303,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     });
   };
 
-  const usageWithdrawal = "Send `/withdraw 1 $TOKEN your-alph-address`\nto withdraw 1 $TOKEN to _your-alph-address_." + (EnvConfig.operator.fees > 0 ? `\n${EnvConfig.operator.fees}% withdrawal fee will be deducted from the amount you withdraw.` : "");
+  let usageWithdrawal = "Send:\n";
+  usageWithdrawal += " &#8226; <code>/withdraw 1 $TOKEN address</code> to withdraw 1 $TOKEN to <em>address</em>.\n";
+  usageWithdrawal += " &#8226; <code>/withdraw 1 address</code> to withdraw 1 $ALPH to <em>address</em>.\n";
+  usageWithdrawal += " &#8226; <code>/withdraw all $TOKEN address</code> to withdraw all your $TOKEN to <em>address</em>.\n";
+  usageWithdrawal += " &#8226; <code>/withdraw all address</code> to withdraw all your coins to <em>address</em>.\n";
+  usageWithdrawal += (EnvConfig.operator.fees > 0 ? `\n${EnvConfig.operator.fees}% withdrawal fee will be deducted from your withdrawals.` : "");
   const withdrawFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
@@ -318,7 +323,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.trim();
-    const sendAmountDestRegex = /^\/withdraw(?:@\w+)?\s+(?<amountAsString>\d+(?:[.,]\d+)?)(?:\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+)$/;
+    const sendAmountDestRegex = /^\/withdraw(?:@\w+)?\s+(?:(?<amountAsString>\d+(?:[.,]\d+)?)|all)(\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+)$/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
@@ -328,34 +333,82 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     let args: RegExpMatchArray;
     args = sendAmountDestRegex.exec(payload);
     console.log(args);
-    if (null === (args = sendAmountDestRegex.exec(payload)) || !("groups" in args) || !args.groups || !({ amountAsString, tokenSymbol, destinationAddress } = args.groups) || undefined === amountAsString || undefined === destinationAddress) {
-      ctx.sendMessage(usageWithdrawal, { parse_mode: "Markdown" });
+    if (null === (args = sendAmountDestRegex.exec(payload)) || !("groups" in args) || !args.groups || !({ amountAsString, tokenSymbol, destinationAddress } = args.groups) || undefined === destinationAddress) {
+      ctx.sendMessage(usageWithdrawal, { parse_mode: "HTML" });
       return;
     }
 
     const msgToReplyTo = ctx.message.message_id;
+    let promisedWithdrawalTxString: Promise<string>;
+    let txStatus: TransactionStatus;
+    let tokenAmount: TokenAmount;
 
-    // If token is undefined, consider it is ALPH
-    tokenSymbol = undefined === tokenSymbol ? ALPHSymbol : tokenSymbol;
-    const tokenAmount = await tokenManager.getTokenAmountByTokenSymbol(tokenSymbol, amountAsString);
-    if (undefined == tokenAmount) {
-      ctx.sendMessage("The token is invalid or does not exist.", { reply_parameters: { message_id: msgToReplyTo } });
+    // If there's only an address, user sent `withdraw all`
+    if (undefined === amountAsString && undefined === tokenSymbol) {
+      ctx.reply("This withdrawal method has some issues and is not currently available. Should be soon!");
       return;
+
+      const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}\n&#9888; This will take some time...`, ["Take operator fees", "Send your funds"]);
+      const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
+      txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
+
+      console.log(`${sender.telegramId} sends everything to ${destinationAddress}`);
+
+      promisedWithdrawalTxString = alphClient.takeFeesAndSweepWalletFromUserTo(sender, destinationAddress, txStatus);
     }
+    else {
 
-    // As AlphClient only allow for . as delimiter
-    amountAsString = amountAsString.replace(",", ".");
+      // If token is undefined, consider it is ALPH
+      tokenSymbol = undefined === tokenSymbol ? ALPHSymbol : tokenSymbol;
+      const token = await tokenManager.getTokenByCaseInsensitiveSymbol(tokenSymbol);
+      if (undefined === token) {
+        ctx.sendMessage("The token is invalid or does not exist.", { reply_parameters: { message_id: msgToReplyTo } });
+        return;
+      }
 
-    const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, tokenAmount);
-    const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
-    txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
+      // If there's only an address and a token, user sent `withdraw all $token`
+      if (undefined === amountAsString) {
+        const userBalance = await alphClient.getUserBalance(sender)
+        if (1 < userBalance.length && token.isALPH()) {
+          ctx.sendMessage(`Withdrawing only all your $ALPH is not allowed as you need some for your other tokens.\nTry to withdraw everything with <code>/withdraw all ${destinationAddress}</code>`, { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
+          return;
+        }
 
-    console.log(`${sender.telegramId} sends ${tokenAmount.toString()} to ${destinationAddress}`);
+        const filteredUserBalance = userBalance.filter(t => t.token.id === token.id);
+        if (0 === filteredUserBalance.length) {
+          console.log(`user ${sender.id} has no $${token.symbol}`);
+          ctx.sendMessage(`You do not have any $${token.symbol}`, { reply_parameters: { message_id: msgToReplyTo } });
+          return;
+        }
 
-    alphClient.sendAmountToAddressFrom(sender, tokenAmount, destinationAddress, txStatus)
-    .then(txId => {
+        tokenAmount = filteredUserBalance[0];
+
+        console.log(`${sender.telegramId} sends all (i.e. ${tokenAmount.amountAsNumber()}) $${tokenSymbol} to ${destinationAddress}`);
+        txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, `all your ${tokenAmount.toString()}`);
+      }
+      // If there's an amount, user does want to send a specific amount,
+      else {
+
+        // As AlphClient only allow for . as delimiter
+        amountAsString = amountAsString.replace(",", ".");
+
+        tokenAmount = new TokenAmount(amountAsString, token, true);
+
+        console.log(`${sender.telegramId} sends ${tokenAmount.toString()} to ${destinationAddress}`);
+        txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}`, tokenAmount.toString());
+      }
+
+      const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
+      txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
+      
+      promisedWithdrawalTxString = alphClient.sendAmountToAddressFrom(sender, tokenAmount, destinationAddress, txStatus);
+    }
+    
+    promisedWithdrawalTxString?.then(txId => {
       console.log("Withdraw successfull!");
-      txStatus.setConfirmed().setTransactionId(txId).displayUpdate();
+      if (0 < txId.length)
+        txStatus.setTransactionId(txId);
+      txStatus.setConfirmed().displayUpdate();
     })
     .catch((err) => {
       if (err instanceof NetworkError) {
