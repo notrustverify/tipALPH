@@ -34,6 +34,17 @@ const SECRET_FOLDER = [`/run/secrets`, `./secrets/`];
   }
 })();
 
+const getBotVersion = () => {
+  for (let dir of ["./", "../"]) {
+    const filepath = `${dir}package.json`;
+    if (!existsSync(filepath))
+      continue;
+    const content = readFileSync(filepath, {flag: 'r', encoding: 'utf8'}).toString();
+    return JSON.parse(content).version;
+  }
+  return ""
+}
+
 export interface FullNodeConfig {
   readonly protocol: string,
   readonly host: string,
@@ -104,7 +115,8 @@ export const EnvConfig = {
     nbConfirmationsBetweenMultipleStepsTransactions: Number(process.env.NUM_CONFIRMATIONS_BETWEEN_MULTIPLE_STEPS_TRANSACTIONS as string || "1"),
     considerMempool: "true" === (process.env.CONSIDER_MEMPOOL as string || "false").toLowerCase(),
     onlyAllowAdmins: "true" === (process.env.ONLY_ALLOW_ADMIN as string || "false").toLowerCase(),
-  }
+  },
+  version: process.env.npm_package_version || getBotVersion() || "no luck",
 } as const;
 
 export const readMnemonic = () => {

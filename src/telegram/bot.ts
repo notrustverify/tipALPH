@@ -42,7 +42,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     if ("private" !== ctx.update.message.chat.type) {
       return;
     }
-    console.log("start");
     const username = ctx.from.username;
     const userId = ctx.message.from.id;
 
@@ -313,8 +312,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
 
-    console.log("withdraw");
-
     const sender = await getUserFromTgId(ctx.message.from.id);
     if (null === sender) {
       ctx.sendMessage(ErrorTypes.UN_INITIALIZED_WALLET, { parse_mode: "Markdown" });
@@ -456,7 +453,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   };
 
   const tokenListFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    console.log("tokens");
     let tokenslistMsg = "List of tokens:\n\n";
     tokenslistMsg += tokenManager.getTokensAsHTML();
     /*
@@ -471,7 +467,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     if ("private" !== ctx.message.chat.type)
       return;
 
-    console.log("privacy");
     let privacyMessage = `I, ${ctx.me} 🤖, hereby promise that I will only collect your:\n`;
     privacyMessage += "\t\t- Telegram ID\n";
     privacyMessage += "\t\t- Telegram username\n";
@@ -486,12 +481,10 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     if ("private" !== ctx.message.chat.type)
       return;
 
-    console.log("forgetme");
     ctx.sendMessage("This feature will be added soon™️. Thank your for your patience.\nIf you cannot wait, please reach my creators, the admins of @NoTrustVerify");
   };
 
   const helpFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    console.log("help");
     let helpMessage = "Here is the list of commands that I handle in this context:\n\n";
     let commandsToDisplay = commands;
 
@@ -573,7 +566,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
   const adminBot = new Composer();
   adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    console.log("stats");
     let msgStats = `<b>${await userRepository.count()}</b> accounts created\n\n`;
     const totalBalance = await alphClient.getTotalTokenAmount();
     msgStats += "TVL:\n"
@@ -583,7 +575,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   });
 
   adminBot.command("fees", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    console.log("fees");
     let msgFees = "Addresses for fees collection:\n";
     msgFees += EnvConfig.operator.addressesByGroup.map((a, i) => ` &#8226; G${i}: <a href="${EnvConfig.explorerAddress()}/addresses/${a}" >${a}</a>`).join("\n");
 
@@ -597,6 +588,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     msgFees += totalFees.map(t => ` &#8226; ${t.toString()}`).join("\n");
 
     ctx.sendMessage(msgFees, { parse_mode: "HTML" });
+  });
+
+  adminBot.command("version", (ctx: Context<Typegram.Update.MessageUpdate>) => {
+    ctx.sendMessage(EnvConfig.version, { reply_parameters: { message_id: ctx.message.message_id } });
+
   });
 
   bot.use(Composer.acl(EnvConfig.telegram.admins, adminBot));
