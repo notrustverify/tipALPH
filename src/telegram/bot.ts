@@ -190,6 +190,15 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         return;
       }
 
+      if (tokenSymbol === undefined && reason !== undefined && 0 < reason.length) {
+        const tokenInReason = await tokenManager.getTokenByCaseInsensitiveSymbol(reason.split(" ")[0])
+        if (tokenInReason !== null) {
+          console.warn("User might have forgotten the $ sign before the token");
+          ctx.sendMessage(`It seems that you might be trying to tip $${tokenInReason.symbol} but forgot the $ sign.. If you really want to tip $${tokenInReason.symbol}, add the $! `);
+          return;
+        }
+      }
+
       receiver = await getUserFromTgId(ctx.message.reply_to_message.from.id);
       if (null === receiver) {
 
