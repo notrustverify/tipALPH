@@ -254,7 +254,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         ctx.sendMessage(`@${receiver.telegramUsername}!` + " You received a tip! Hit `Start` on @" + ctx.me + " to access your account!", { parse_mode: "Markdown" });
       // If sender tipped by tagging, receiver should get a notification (if not bot) (receiver might not be in the chat where tip was ordered)
       else if (!isReply && ctx.botInfo.id != receiver.telegramId)
-        ctx.telegram.sendMessage(receiver.telegramId, `You received ${tokenAmount.toString()} from @${sender.telegramUsername}${genTxIdText(txId)}`, { parse_mode: "HTML" });
+        ctx.telegram.sendMessage(receiver.telegramId, `You received ${tokenAmount.toString()} from @${sender.telegramUsername} ${genTxIdText(txId)}`, { parse_mode: "HTML" });
     
     })
     .catch((err) => {
@@ -345,10 +345,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     // If there's only an address, user sent `withdraw all`
     if (undefined === amountAsString && undefined === tokenSymbol) {
+      /*
       ctx.reply("This withdrawal method has some issues and is not currently available. Should be soon!");
       return;
+      */
 
-      const txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}\n&#9888; This will take some time...`, ["Take operator fees", "Send your funds"]);
+      txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}\n&#9888; This will take some time...`, ["Take operator fees", "Send your funds"]);
       const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
       txStatus.setDisplayUpdate((async (update: string) => editLastMsgWith(ctx, lastMsg, update)));
 

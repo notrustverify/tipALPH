@@ -241,8 +241,7 @@ export class AlphClient {
       txStatus.setConfirmed().nextStep().displayUpdate();
 
     // Stage 2: Sweep rest of balance to external address
-    const sweepAllTx = await this.sweepWalletFromUserTo(userWallet, destinationAddress);
-    console.log(sweepAllTx);
+    const sweepAllTx = await this.sweepWalletFromUserTo(userWallet, destinationAddress, txStatus);
     
     if (0 === sweepAllTx.length)
       return "";
@@ -269,7 +268,7 @@ export class AlphClient {
     .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
-  async sweepWalletFromUserTo(userWallet: PrivateKeyWallet, destinationAddress: string): Promise<string[]> {
+  async sweepWalletFromUserTo(userWallet: PrivateKeyWallet, destinationAddress: string, txStatus?: TransactionStatus): Promise<string[]> {
     return this.nodeProvider.transactions.postTransactionsSweepAddressBuild({
       fromPublicKey: userWallet.publicKey,
       toAddress: destinationAddress,
@@ -278,7 +277,11 @@ export class AlphClient {
       sweepResults.unsignedTxs.map(tx => userWallet.signAndSubmitUnsignedTx({ signerAddress: userWallet.address, unsignedTx: tx.unsignedTx }))
     )
     .then(promises => Promise.all(promises))
-    .then(txResults => { console.log("Tx results", txResults); return txResults.map(tx => tx.txId); })
+    .then(txResults => {
+      if (undefined !== txStatus && !EnvConfig.isOnDevNet() && 0 < txResults.length)
+        txStatus.setTransactionId(txResults[0].txId).displayUpdate();
+      return txResults.map(tx => tx.txId);
+    })
     .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
