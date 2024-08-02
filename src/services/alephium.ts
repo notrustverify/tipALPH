@@ -17,8 +17,9 @@ export class AlphClient {
   private readonly mnemonicReader: () => string;
   private userStore: Repository<User>;
   private tokenManager: TokenManager;
-  private operatorConfig: OperatorConfig;
-  private registerMutex: Mutex;
+  private readonly operatorConfig: OperatorConfig;
+  private readonly registerMutex: Mutex;
+  private readonly deletionMutex: Mutex;
 
   constructor(nodeProvider: NodeProvider, mnemonicReader: () => string, userStore: Repository<User>, tokenManager: TokenManager, operatorConfig: OperatorConfig) {
     this.nodeProvider = nodeProvider;
@@ -27,33 +28,8 @@ export class AlphClient {
     this.tokenManager = tokenManager;
     this.operatorConfig = operatorConfig;
     this.registerMutex = new Mutex();
+    this.deletionMutex = new Mutex();
   }
-
-  /*
-  private async waitForTxConfirmation(txId: string, nbConfirmations: number, timeIntervallInMilliseconds: number): Promise<boolean> {
-    let txStatus: Confirmed | MemPooled | TxNotFound
-
-    for(;;) { // Equivalent of while(true) but satisfies the linter
-      txStatus = await this.nodeProvider.transactions.getTransactionsStatus({ txId });
-
-      switch(txStatus.type) {
-        case "TxNotfound":
-          return Promise.reject("Tx Not Found");
-        case "MemPooled":
-          if (0 <= nbConfirmations)
-            return Promise.resolve(true);
-          break;
-        case "Confirmed":
-          console.log((<Confirmed>txStatus).chainConfirmations)
-          if (nbConfirmations <= (<Confirmed>txStatus).chainConfirmations)
-            return Promise.resolve(true);
-          break;
-      }
-
-      await delay(timeIntervallInMilliseconds);
-    }
-  }
-  */
 
   async registerUser(newUser: User): Promise<User> {
     return this.registerMutex.runExclusive(async () => { // Should use Result<> instead of returning error when user already exists.
@@ -63,6 +39,12 @@ export class AlphClient {
       const userWithId = await this.userStore.save(newUser);
       userWithId.address = this.deriveUserAddress(userWithId);
       return this.userStore.save(userWithId);
+    });
+  }
+
+  async deleteUser(user: User): Promise<void> {
+    return this.deletionMutex.runExclusive(async () => {
+      this.userStore.remove(user);
     });
   }
 
@@ -251,6 +233,11 @@ export class AlphClient {
     return sweepAllTx[0];
   }
 
+  async emptyWalletForDeletion(user: User): Promise<string[]> {
+    const userWallet = this.getUserWallet(user);
+    return this.sweepWalletFromUserTo(userWallet, EnvConfig.operator.addressesByGroup[0])
+  }
+
   async consolidateIfRequired(user: User): Promise<string> {
     console.log(`Checking if consolidation is required for user ${user.id}`);
     const userWallet = this.getUserWallet(user);
@@ -268,7 +255,7 @@ export class AlphClient {
     .catch((err) => Promise.reject(this.adaptError(err)));
   }
 
-  async sweepWalletFromUserTo(userWallet: PrivateKeyWallet, destinationAddress: string, txStatus?: TransactionStatus): Promise<string[]> {
+  private async sweepWalletFromUserTo(userWallet: PrivateKeyWallet, destinationAddress: string, txStatus?: TransactionStatus): Promise<string[]> {
     return this.nodeProvider.transactions.postTransactionsSweepAddressBuild({
       fromPublicKey: userWallet.publicKey,
       toAddress: destinationAddress,

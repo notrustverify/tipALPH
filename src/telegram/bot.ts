@@ -11,6 +11,7 @@ import { AlphClient } from "../services/alephium.js";
 import { EnvConfig } from "../config.js";
 import { User } from "../db/user.js";
 import { DUST_AMOUNT, prettifyAttoAlphAmount } from "@alephium/web3";
+import { LeavingService } from "../services/leavingService.js";
 
 let bot: Telegraf;
 
@@ -23,6 +24,8 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   console.log("Starting Telegram bot...");
   
   bot = new Telegraf(EnvConfig.telegram.bot.token);
+
+  const leavingService = new LeavingService(EnvConfig.expirationDelay);
 
   const commands: Command[] = [];
 
@@ -351,10 +354,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     // If there's only an address, user sent `withdraw all`
     if (undefined === amountAsString && undefined === tokenSymbol) {
-      /*
-      ctx.reply("This withdrawal method has some issues and is not currently available. Should be soon!");
-      return;
-      */
 
       txStatus = new TransactionStatus(`Withdrawal to ${destinationAddress}\n&#9888; This will take some time...`, ["Take operator fees", "Send your funds"]);
       const lastMsg = await ctx.sendMessage(txStatus.toString(), { reply_parameters: { message_id: msgToReplyTo }, parse_mode: "HTML" });
@@ -464,10 +463,6 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   const tokenListFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     let tokenslistMsg = "List of tokens:\n\n";
     tokenslistMsg += tokenManager.getTokensAsHTML();
-    /*
-    const tokenList = await tokenManager.getTokens();
-    tokenslistMsg += tokenList.map(t => ` &#8226; $${t.symbol}` + (null !== t.description ? `: ${t.description}` : "")).join("\n");
-    */
     tokenslistMsg += `\n\n<em>Next update in ${convertTimeSecToMinSec(tokenManager.nextTokenUpdate())}</em>`;
     ctx.sendMessage(tokenslistMsg, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
   };
@@ -486,11 +481,63 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     ctx.sendMessage(privacyMessage);
   };
   
+  const usageForgetMe = `Send <code>/forgetme</code> to ask me to forget you.`;
   const forgetmeFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
-    if ("private" !== ctx.message.chat.type)
+    if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
 
-    ctx.sendMessage("This feature will be added soon™️. Thank your for your patience.\nIf you cannot wait, please reach my creators, the admins of @NoTrustVerify");
+    const user = await getUserFromTgId(ctx.message.from.id);
+    if (null === user) {
+      ctx.sendMessage(ErrorTypes.FORGET_NON_REGISTRERED_USER);
+      return;
+    }
+
+    // Did the user already registered?
+    const previouslyRegistered = await leavingService.didUserAlreadyRegisteredIntention(user);
+    const goodByeMessageForUser = `GoodBye-From-${user.telegramUsername}`;
+    const payload: string = (ctx.message.text as string).trim();
+    
+    const forgetMeRegex = /^\/forgetme(?:@\w+)?(?:\s+(?<userProvidedGoodByeString>[a-zA-Z0-9\-_]{15,45}))?$/;
+    let userProvidedGoodByeString: string;
+    let userProvidedGoodByeMessage: string;
+
+    let args: RegExpMatchArray = forgetMeRegex.exec(payload);
+    if (null !== args && ("groups" in args) && undefined !== args.groups && undefined !== ({ userProvidedGoodByeString } = args.groups) && undefined !== userProvidedGoodByeString)
+      userProvidedGoodByeMessage = userProvidedGoodByeString;
+
+    if (!previouslyRegistered) {
+      if (undefined !== userProvidedGoodByeMessage) {
+        ctx.sendMessage(usageForgetMe, { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+        return;
+      }
+
+      console.log(`User ${user.id} wants to be forgotten`);
+      await leavingService.registerLeavingIntention(user);
+
+      let byeMessage = "Note that by asking me to forget you, you will no longer be able to access your funds.\nPlease confirm your intention by sending"
+      byeMessage += `<code>/forgetme ${goodByeMessageForUser}</code> in the next ${EnvConfig.expirationDelay/1000} seconds.`
+      ctx.sendMessage(byeMessage, { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+    }
+    else if (previouslyRegistered) {
+      if (userProvidedGoodByeMessage === goodByeMessageForUser) {
+        console.log(`User ${user.id} confirmed their intention to be forgotten! Removing from database`);
+
+        await leavingService.removeUserLeavingIntention(user);
+
+        // Sweeping wallet
+        const txs = await alphClient.emptyWalletForDeletion(user);
+        console.log(`User wallet emptied! Txs: ${txs.join(", ")}`);
+
+        // Deleting account
+        await alphClient.deleteUser(user);
+        
+        ctx.sendMessage(`Your account have successfully been deleted. To use me again, send <code>/start</code>`, { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+      }
+      else {
+        leavingService.removeUserLeavingIntention(user);
+        ctx.sendMessage("Wrong confirmation code. We'll do as if you never asked me to forget you…", { reply_parameters: { message_id: ctx.message.message_id } });
+      }
+    }
   };
 
   const helpFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {

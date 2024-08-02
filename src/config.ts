@@ -116,6 +116,7 @@ export const EnvConfig = {
     considerMempool: "true" === (process.env.CONSIDER_MEMPOOL as string || "false").toLowerCase(),
     onlyAllowAdmins: "true" === (process.env.ONLY_ALLOW_ADMIN as string || "false").toLowerCase(),
   },
+  expirationDelay: Number(process.env.EXPIRATION_DELAY as string || "30000"),
   version: process.env.npm_package_version || getBotVersion() || "no luck",
 } as const;
 

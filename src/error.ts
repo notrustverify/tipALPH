@@ -2,11 +2,11 @@ import { Number256 } from "@alephium/web3";
 
 import { User } from "./db/user.js";
 import { TokenAmount } from "./tokens/tokenAmount.js";
-import { Token } from "./db/token.js";
 
 export enum ErrorTypes {
     UN_INITIALIZED_WALLET = "It seems that you haven't initialized your wallet yet. Hit `Start` in DM with me to do it!",
     USER_ALREADY_REGISTERED = "user already registered",
+    FORGET_NON_REGISTRERED_USER = "I cannot forget you, you aren't registered yet…",
 }
 
 export function genUserMessageErrorWhile(action: string): string {
