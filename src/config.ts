@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { existsSync, readFileSync } from "fs";
+import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 
 config({ path: ['.env'] });
 const MNEMONIC_FILE = "bot_mnemonic.txt";
@@ -118,6 +119,10 @@ export const EnvConfig = {
   },
   expirationDelay: Number(process.env.EXPIRATION_DELAY as string || "30000"),
   version: process.env.npm_package_version || getBotVersion() || "no luck",
+  prometheusExporter: {
+    port: Number(process.env.PROMETHEUS_PORT as string || PrometheusExporter.DEFAULT_OPTIONS.port),
+    endpoint: process.env.PROMETHEUS_ENDPOINT as string || PrometheusExporter.DEFAULT_OPTIONS.endpoint,
+  }
 } as const;
 
 export const readMnemonic = () => {

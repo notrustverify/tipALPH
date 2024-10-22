@@ -1,6 +1,6 @@
 {
   "name": "tipalph",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "A tipping bot for the Alephium Blockchain",
   "type": "module",
   "main": "build/index.js",
@@ -16,8 +16,8 @@
     "write-migration-file": "npx typeorm-ts-node-esm migration:generate -d src/db/data-source.ts"
   },
   "engines": {
-    "node": ">=18.19.0",
-    "npm": ">=10.2.3"
+    "node": ">=20.18.0",
+    "npm": ">=10.8.0"
   },
   "repository": {
     "type": "git",
@@ -34,7 +34,7 @@
     "@telegraf/types": "^7.1.0",
     "@tsconfig/node18": "^18.2.4",
     "@types/jest": "^29.5.13",
-    "@types/node": "^20.16.13",
+    "@types/node": "^20.16.14",
     "babel-jest": "^29.7.0",
     "eslint": "^8.57.1",
     "eslint-config-love": "^43.1.0",
@@ -53,6 +53,14 @@
     "@alephium/cli": "^1.8.2",
     "@alephium/web3": "^1.8.2",
     "@alephium/web3-wallet": "^1.8.2",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-prometheus": "^0.53.0",
+    "@opentelemetry/instrumentation-http": "^0.53.0",
+    "@opentelemetry/instrumentation-net": "^0.39.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/sdk-metrics": "^1.26.0",
+    "@opentelemetry/sdk-node": "^0.53.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0",
     "async-mutex": "^0.5.0",
     "bip39": "^3.1.0",
     "cron": "^3.1.7",

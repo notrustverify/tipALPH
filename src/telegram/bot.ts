@@ -1,3 +1,4 @@
+import { metrics, ValueType } from '@opentelemetry/api';
 import { Telegraf, Context, Composer } from "telegraf";
 import * as Typegram from "telegraf/types";
 import { Repository } from "typeorm";
@@ -14,6 +15,8 @@ import { DUST_AMOUNT, prettifyAttoAlphAmount } from "@alephium/web3";
 import { LeavingService } from "../services/leavingService.js";
 
 let bot: Telegraf;
+
+const meter = metrics.getMeter('telegram');
 
 export const editLastMsgWith = async (ctx: Context<Typegram.Update.MessageUpdate>, lastMsg: Typegram.Message.TextMessage, newText: string, isHTML: boolean = true, linkPreview: boolean = true) => {
   const parse_mode = isHTML ? "HTML" : "Markdown";
@@ -40,11 +43,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   /**
    * Command functions
    */
-
   const startFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.update.message.chat.type) {
       return;
     }
+
     const username = ctx.from.username;
     const userId = ctx.message.from.id;
 
@@ -137,7 +140,12 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     
     sendBalanceMessage(ctx, user);
   };
-  
+
+  const tipSuccessCounter = meter.createCounter(`telegram.tip.success.counter`,{
+    description: `A counter for the number of times the tip command has been processed successfully`,
+    valueType: ValueType.INT,
+  });
+
   let usageTip = "To tip @user 1 $TOKEN, either:\n - tag it: `/tip 1 $TOKEN @user`\n - reply to one of user's message with: `/tip 1 $TOKEN`\n";
   usageTip += "If you want to tip $ALPH, you can omit the $TOKEN\n";
   usageTip += "You can also add a reason in the end of each command.";
@@ -267,6 +275,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       else if (!isReply && ctx.botInfo.id != receiver.telegramId)
         ctx.telegram.sendMessage(receiver.telegramId, `You received ${tokenAmount.toString()} from @${sender.telegramUsername} ${genTxIdText(txId)}`, { parse_mode: "HTML" });
     
+      tipSuccessCounter.add(1);
     })
     .catch((err) => {
       console.log(err);
@@ -313,6 +322,11 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       txStatus.setFailed().displayUpdate();
     });
   };
+
+  const withdrawSuccessCounter = meter.createCounter(`telegram.withdraw.success.counter`,{
+    description: `A counter for the number of times the withdraw command has been processed successfully`,
+    valueType: ValueType.INT,
+  });
 
   let usageWithdrawal = "Send:\n";
   usageWithdrawal += " &#8226; <code>/withdraw 1 $TOKEN address</code> to withdraw 1 $TOKEN to <em>address</em>.\n";
@@ -413,6 +427,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     
     promisedWithdrawalTxString?.then(txId => {
       console.log("Withdraw successfull!");
+      withdrawSuccessCounter.add(1);
       if (0 < txId.length)
         txStatus.setTransactionId(txId);
       txStatus.setConfirmed().displayUpdate();
@@ -482,6 +497,14 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
   };
   
   const usageForgetMe = `Send <code>/forgetme</code> to ask me to forget you.`;
+  const forgetMeInitiatedCounter = meter.createCounter(`telegram.forgetme.initiated.counter`,{
+    description: `A counter for the number of times the forgetme process has been initiated`,
+    valueType: ValueType.INT,
+  });
+  const forgetMeSuccessCounter = meter.createCounter(`telegram.forgetme.success.counter`,{
+    description: `A counter for the number of times the forgetme command has been processed successfully`,
+    valueType: ValueType.INT,
+  });
   const forgetmeFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     if ("private" !== ctx.message.chat.type || !("text" in ctx.message))
       return;
@@ -517,6 +540,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
       let byeMessage = "Note that by asking me to forget you, you will no longer be able to access your funds.\nPlease confirm your intention by sending"
       byeMessage += `<code>/forgetme ${goodByeMessageForUser}</code> in the next ${EnvConfig.expirationDelay/1000} seconds.`
       ctx.sendMessage(byeMessage, { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+      forgetMeInitiatedCounter.add(1);
     }
     else if (previouslyRegistered) {
       if (userProvidedGoodByeMessage === goodByeMessageForUser) {
@@ -532,6 +556,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
         await alphClient.deleteUser(user);
         
         ctx.sendMessage(`Your account have successfully been deleted. To use me again, send <code>/start</code>`, { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+        forgetMeSuccessCounter.add(1);
       }
       else {
         leavingService.removeUserLeavingIntention(user);
@@ -606,7 +631,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("start", "initialize your account with the bot", startFct, true),
     new Command("address", "display the address of your account", addressFct, true),
     new Command("balance", "display the balance of your account", balanceFct, true),
-    new Command("tip", "tip amount to a user", tipFct, false, usageTip),
+    new Command("tip", "tip amount to a user", tipFct, false, usageTip, ["tipa"]),
     new Command("withdraw", "send amount to the ALPH address" + (EnvConfig.operator.fees > 0 ? ` (bot takes ${EnvConfig.operator.fees}% fees!)` : ""), withdrawFct, true, usageWithdrawal),
     new Command("tokens", "display the list of recognized token", tokenListFct, false),
     new Command("privacy", "display the data protection policy of the bot", privacyFct, true),
@@ -614,23 +639,30 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     new Command("help", "display help", helpFct, false),
   );
 
-  for (const cmd of commands)
-    bot.command(cmd.name, cmd.process);
+  /*
+   * Register the commands
+   */
+  for (const cmd of commands) {
+    bot.command(cmd.name, cmd.getProcess());
 
-  // Register some aliases (do not add in the commands array to not display it in menu & help message)
-  bot.command("tipa", tipFct);
+    for (const alias of cmd.getAliases())
+      bot.command(alias, cmd.getProcess(alias));
+  }
 
-  const adminBot = new Composer();
-  adminBot.command("stats", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+  /*
+   * Admin commands
+   */
+
+  const statsFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     let msgStats = `<b>${await userRepository.count()}</b> accounts created\n\n`;
     const totalBalance = await alphClient.getTotalTokenAmount();
     msgStats += "TVL:\n"
     msgStats += totalBalance.map(t => ` &#8226; ${t.toString()}`).join("\n");
 
     ctx.sendMessage(msgStats, { parse_mode: "HTML" });
-  });
+  }
 
-  adminBot.command("fees", async (ctx: Context<Typegram.Update.MessageUpdate>) => {
+  const feesFct = async (ctx: Context<Typegram.Update.MessageUpdate>) => {
     let msgFees = "Addresses for fees collection:\n";
     msgFees += EnvConfig.operator.addressesByGroup.map((a, i) => ` &#8226; G${i}: <a href="${EnvConfig.explorerAddress()}/addresses/${a}" >${a}</a>`).join("\n");
 
@@ -644,25 +676,40 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
     msgFees += totalFees.map(t => ` &#8226; ${t.toString()}`).join("\n");
 
     ctx.sendMessage(msgFees, { parse_mode: "HTML" });
-  });
+  };
 
-  adminBot.command("version", (ctx: Context<Typegram.Update.MessageUpdate>) => {
+  const versionFct = (ctx: Context<Typegram.Update.MessageUpdate>) => {
     ctx.sendMessage(EnvConfig.version, { reply_parameters: { message_id: ctx.message.message_id } });
+  };
 
-  });
+  const adminCommands = [
+    new Command("stats", "Display stats about the bot", statsFct, false),
+    new Command("fees", "Display collected fees so far", feesFct, false),
+    new Command("version", "Display TipALPH version", versionFct, false),
+  ];
+
+  /*
+   * Register the admin commands
+   */
+  const adminBot = new Composer();
+  for (const cmd of adminCommands) {
+    adminBot.command(cmd.name, cmd.getProcess());
+
+    for (const alias of cmd.getAliases())
+      adminBot.command(alias, cmd.getProcess(alias));
+  }
 
   bot.use(Composer.acl(EnvConfig.telegram.admins, adminBot));
 
   /**
    * Signal handling and start of signal
    */
-
-  const propagateSignal = (signal: string) => {
+  const stopBot = (signal: string) => {
     console.log(`Stopping Telegram bot after receiving ${signal}`);
     bot.stop(signal);
   }
-  process.once('SIGINT', () => { tokenManager.stopCron(); propagateSignal('SIGINT'); });
-  process.once('SIGTERM', () => { tokenManager.stopCron(); propagateSignal('SIGTERM'); });
+  process.once('SIGINT', () => { tokenManager.stopCron(); stopBot('SIGINT'); });
+  process.once('SIGTERM', () => { tokenManager.stopCron(); stopBot('SIGTERM'); });
 
   // Filter to only receive messages updates
   // https://telegraf.js.org/interfaces/Telegraf.LaunchOptions.html#allowedUpdates

@@ -1,6 +1,6 @@
-import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, waitForTxConfirmation, codec, DEFAULT_GAS_ALPH_AMOUNT } from "@alephium/web3";
+import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, waitForTxConfirmation } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
-import { Balance, Confirmed, MemPooled, TxNotFound } from "@alephium/web3/dist/src/api/api-alephium";
+import { Balance } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
 import { Mutex } from "async-mutex";
 
