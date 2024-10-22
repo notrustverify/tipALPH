@@ -8,10 +8,9 @@ services:
       - .env:/usr/app/.env:ro
       - ./data:/usr/app/data
     ports:
-      - 9464:9464
+      - 9464:9464/tcp
     secrets:
       - source: bot_mnemonic.txt
-        mode: 0400
     profiles:
       - tipalph
 

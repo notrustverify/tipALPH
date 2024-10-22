@@ -1,6 +1,6 @@
 {
   "name": "tipalph",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "A tipping bot for the Alephium Blockchain",
   "type": "module",
   "main": "build/index.js",
@@ -30,7 +30,7 @@
   "homepage": "https://github.com/notrustverify/tipALPH#readme",
   "devDependencies": {
     "@alephium/web3-test": "^1.8.2",
-    "@babel/preset-env": "^7.25.8",
+    "@babel/preset-env": "^7.25.9",
     "@telegraf/types": "^7.1.0",
     "@tsconfig/node18": "^18.2.4",
     "@types/jest": "^29.5.13",
