@@ -27,7 +27,7 @@ initializationDBMutex.waitForUnlock()
   const alphClient = await createAlphClient(readMnemonic, userRepository, EnvConfig.fullnode, tokenManager, EnvConfig.operator);
 
   // Add some gauge metrics
-  meter.createObservableGauge('nb_users', {
+  meter.createObservableGauge('tipalph_nb_users', {
     description: "Current number of users of TipALPH",
     unit: 'users',
     valueType: ValueType.INT,
@@ -36,7 +36,7 @@ initializationDBMutex.waitForUnlock()
     observableResult.observe(currentNbUser);
   });
 
-  meter.createObservableGauge('nb_tokens', {
+  meter.createObservableGauge('tipalph_nb_tokens', {
     description: "Current number of registered tokens in TipALPH",
     unit: 'tokens',
     valueType: ValueType.INT,
