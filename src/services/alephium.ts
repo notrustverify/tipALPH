@@ -1,6 +1,5 @@
 import { NodeProvider, Destination, DUST_AMOUNT, web3, isValidAddress, waitForTxConfirmation } from "@alephium/web3";
 import { PrivateKeyWallet, deriveHDWalletPrivateKey } from "@alephium/web3-wallet";
-import { Balance } from "@alephium/web3/dist/src/api/api-alephium";
 import { Repository } from "typeorm";
 import { Mutex } from "async-mutex";
 
@@ -11,6 +10,8 @@ import { EnvConfig, FullNodeConfig, OperatorConfig } from "../config.js";
 import * as Error from "../error.js";
 import { User } from "../db/user.js";
 import { Token } from "../db/token.js";
+
+type Balance = import("@alephium/web3").node.Balance;
 
 export class AlphClient {
   private readonly nodeProvider: NodeProvider;
@@ -86,8 +87,9 @@ export class AlphClient {
     const alphToken = await this.tokenManager.getTokenBySymbol("ALPH");
     const userBalance = [new TokenAmount(balance.balance, alphToken)];
 
-    if ("tokenBalances" in balance && undefined !== balance.tokenBalances && balance.tokenBalances.length > 0) {
-      const userTokens = await Promise.allSettled(balance.tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
+    const tokenBalances = balance.tokenBalances ?? [];
+    if (tokenBalances.length > 0) {
+      const userTokens = await Promise.allSettled(tokenBalances.map(async (t) => this.tokenManager.getTokenAmountFromIdAmount(t.id, t.amount)));
       const recognisedToken = userTokens.filter(t => "fulfilled" === t.status);
       userBalance.push(...recognisedToken.map((t: PromiseFulfilledResult<TokenAmount>) => t.value));
       if (userTokens.length != recognisedToken.length)

@@ -346,7 +346,7 @@ export async function runTelegram(alphClient: AlphClient, userRepository: Reposi
 
     const messageText = ctx.message.text as string;
     const payload: string = messageText.trim();
-    const sendAmountDestRegex = /^\/withdraw(?:@\w+)?\s+(?:(?<amountAsString>\d+(?:[.,]\d+)?)|all)(\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+)$/;
+    const sendAmountDestRegex = /^\/withdraw(?:@\w+)?\s+(?:(?<amountAsString>\d+(?:[.,]\d+)?)|all)(\s+\$(?<tokenSymbol>[a-zA-Z]{2,}))?\s+(?<destinationAddress>[a-zA-Z0-9]+(?::[0-3])?)$/;
 
     // These are the values that we are trying to determine
     let amountAsString: string;
