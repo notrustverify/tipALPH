@@ -152,13 +152,16 @@ export class AlphClient {
 
     if (this.operatorConfig.fees > 0) {
       const tokenAmountOperatorFee = tokenAmount.substractAndGetPercentage(this.operatorConfig.fees);
-      const operatorFeesAddress = this.operatorConfig.addressesByGroup[userWallet.group];
-      console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${this.operatorConfig.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
-      destinations.push({
-        address: operatorFeesAddress,
-        attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : DUST_AMOUNT,
-        ...{ tokens: tokenAmountOperatorFee.token.isALPH() ? [] : [{ id: tokenAmountOperatorFee.token.id, amount: tokenAmountOperatorFee.amount }]}
-      });
+      // A zero-valued token output is rejected by the node, so skip fee collection when it rounds down to 0
+      if (tokenAmountOperatorFee.amount > 0n) {
+        const operatorFeesAddress = this.operatorConfig.addressesByGroup[userWallet.group];
+        console.log(`Collecting ${tokenAmountOperatorFee.toString()} (${this.operatorConfig.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`);
+        destinations.push({
+          address: operatorFeesAddress,
+          attoAlphAmount: tokenAmountOperatorFee.token.isALPH() ? tokenAmountOperatorFee.amount : DUST_AMOUNT,
+          ...{ tokens: tokenAmountOperatorFee.token.isALPH() ? [] : [{ id: tokenAmountOperatorFee.token.id, amount: tokenAmountOperatorFee.amount }]}
+        });
+      }
     }
 
     destinations.push({
@@ -202,21 +205,28 @@ export class AlphClient {
 
       const operatorFeesTokenAmount: TokenAmount[] = userBalance.map(t => t.substractAndGetPercentage(this.operatorConfig.fees));
       operatorFeesTokenAmount.forEach(t => console.log(`Collecting ${t.toString()} (${this.operatorConfig.fees}%) fees on ${operatorFeesAddress} (group ${userWallet.group})`));
-      
-      const newTx = await userWallet.signAndSubmitTransferTx({
-        signerAddress: (await userWallet.getSelectedAccount()).address,
-        destinations: [{
-          address: operatorFeesAddress,
-          attoAlphAmount: operatorFeesTokenAmount.filter(t => t.token.isALPH)[0].amount,
-          tokens: operatorFeesTokenAmount.filter(t => !t.token.isALPH()).map(t => { return { id: t.token.id, amount: t.amount }; }),
-        }],
-      })
-      .catch((err) => Promise.reject(this.adaptError(err)));
-      
-      if (undefined !== txStatus && !EnvConfig.isOnDevNet())
-        txStatus.setTransactionId(newTx.txId).displayUpdate();
 
-      await waitForTxConfirmation(newTx.txId, EnvConfig.bot.nbConfirmationsBetweenMultipleStepsTransactions, 1000);
+      const alphFee = operatorFeesTokenAmount.filter(t => t.token.isALPH())[0];
+      // A zero-valued token output is rejected by the node, so drop any fee that rounded down to 0
+      const nonZeroTokenFees = operatorFeesTokenAmount.filter(t => !t.token.isALPH() && t.amount > 0n);
+
+      if (alphFee.amount > 0n || nonZeroTokenFees.length > 0) {
+        const newTx = await userWallet.signAndSubmitTransferTx({
+          signerAddress: (await userWallet.getSelectedAccount()).address,
+          destinations: [{
+            address: operatorFeesAddress,
+            // A token-carrying output still needs a minimum ALPH backing even if the ALPH fee itself rounded down to 0
+            attoAlphAmount: alphFee.amount > 0n ? alphFee.amount : DUST_AMOUNT,
+            tokens: nonZeroTokenFees.map(t => { return { id: t.token.id, amount: t.amount }; }),
+          }],
+        })
+        .catch((err) => Promise.reject(this.adaptError(err)));
+
+        if (undefined !== txStatus && !EnvConfig.isOnDevNet())
+          txStatus.setTransactionId(newTx.txId).displayUpdate();
+
+        await waitForTxConfirmation(newTx.txId, EnvConfig.bot.nbConfirmationsBetweenMultipleStepsTransactions, 1000);
+      }
     }
 
     if (undefined !== txStatus)
