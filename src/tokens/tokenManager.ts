@@ -92,15 +92,15 @@ export class TokenManager {
         await this.updateTokenMutex.acquire();
         console.log("Starting token update");
 
+        const nbTokens = await this.getNumberTokens();
+        if (0 === nbTokens) { // If no token are stored, we add the ALPH
+            await this.tokenRepository.save(new Token(''.padStart(64, '0'), "Alephium", "ALPH", 18));
+        }
+
         if (EnvConfig.isOnDevNet()) {
             console.log("Cannot update token list for devnet");
             this.updateTokenMutex.release();
             return;
-        }
-
-        const nbTokens = await this.getNumberTokens();
-        if (0 === nbTokens) { // If no token are stored, we add the ALPH
-            await this.tokenRepository.save(new Token(''.padStart(64, '0'), "Alephium", "ALPH", 18));
         }
 
         const tokensListURL = `https://github.com/alephium/token-list/raw/master/tokens/${EnvConfig.network}.json`;

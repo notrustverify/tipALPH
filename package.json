@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/notrustverify/tipALPH#readme",
   "devDependencies": {
-    "@alephium/web3-test": "^1.11.6",
+    "@alephium/web3-test": "^3.0.4",
     "@babel/preset-env": "^7.26.9",
     "@telegraf/types": "^7.1.0",
     "@tsconfig/node18": "^18.2.4",
@@ -50,9 +50,9 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@alephium/cli": "^1.11.6",
-    "@alephium/web3": "^1.11.6",
-    "@alephium/web3-wallet": "^1.11.6",
+    "@alephium/cli": "^3.0.4",
+    "@alephium/web3": "^3.0.4",
+    "@alephium/web3-wallet": "^3.0.4",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.57.0",
     "@opentelemetry/exporter-prometheus": "^0.200.0",

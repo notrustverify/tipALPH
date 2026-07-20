@@ -10,6 +10,9 @@ module.exports = {
     //maxWorkers: 1,
     runner: 'jest-serial-runner',
 
+    // Default 5000ms is too short for real devnet fullnode round-trips (tx submission + confirmations)
+    testTimeout: 120000,
+
     collectCoverage: false,
     coverageDirectory: "./coverage/",
     collectCoverageFrom: [

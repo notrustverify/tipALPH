@@ -3,7 +3,7 @@ import { DataSource, Repository } from "typeorm"
 import * as bip39 from "bip39";
 import "reflect-metadata"; // Required by Typeorm
 import * as dotenv from "dotenv";
-import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isValidAddress, MIN_UTXO_SET_AMOUNT, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
+import { convertAlphAmountWithDecimals, DEFAULT_GAS_ALPH_AMOUNT, isGrouplessAddress, isValidAddress, MIN_UTXO_SET_AMOUNT, NodeProvider, number256ToNumber, web3 } from "@alephium/web3";
 import { deriveHDWalletPrivateKeyForGroup, PrivateKeyWallet } from "@alephium/web3-wallet";
 
 import { testNodeWallet } from "@alephium/web3-test";
@@ -67,7 +67,7 @@ beforeAll(async () => {
 
     return addresses;
   })());
-  operatorConfig = { fees: 3, addressesByGroup: addresses, strictMinimalWithdrawalAmount: 0.005 };
+  operatorConfig = { fees: 3, addressesByGroup: addresses, strictMinimalWithdrawalAmount: 0.005, strictMinimalWithdrawalAllAmount: 0.005 };
 
   alphClient = await createAlphClient(() => testMnemonic, userRepository, fullnodeConfig, tokenManager, operatorConfig);
 });
@@ -317,6 +317,34 @@ describe("Relative to users", () => {
         expect(Math.abs(diffBetweenActualAndExpectation)).toBeLessThanOrEqual(withdrawAmount/2);   // TODO: find better bound
         expect(userBalance[0].token.isALPH()).toBeTruthy();
       }
+    });
+
+    // Groupless (P2PK) addresses were introduced by the Danube upgrade. isValidAddress() from
+    // older SDK versions didn't recognise them, causing "/withdraw all <groupless address>" to
+    // fail with InvalidAddressError even though the address was perfectly valid.
+    it("should be able to withdraw all to a groupless (P2PK) address", async () => {
+      expect.assertions(5);
+
+      const grouplessWallet = PrivateKeyWallet.Random(0, web3.getCurrentNodeProvider(), 'gl-secp256k1');
+      expect(isGrouplessAddress(grouplessWallet.address)).toBeTruthy();
+      expect(isValidAddress(grouplessWallet.address)).toBeTruthy();
+
+      const u = new User(storedUsers.length + 1, `${storedUsers.length + 1}`);
+      await alphClient.registerUser(u);
+
+      const testWallet = await testNodeWallet();
+      await expect(testWallet.signAndSubmitTransferTx({
+        signerAddress: (await testWallet.getSelectedAccount()).address,
+        destinations: [
+          { address: u.address, attoAlphAmount: convertAlphAmountWithDecimals(distributedAmount.toString())! }
+        ]
+      }).catch(console.error)).resolves.not.toBeUndefined();
+
+      const withdrawalTx = await alphClient.takeFeesAndSweepWalletFromUserTo(u, grouplessWallet.address);
+      expect(withdrawalTx).toMatch(/.+/);
+
+      const destinationBalance = await web3.getCurrentNodeProvider().addresses.getAddressesAddressBalance(grouplessWallet.address);
+      expect(BigInt(destinationBalance.balance)).toBeGreaterThan(0n);
     });
 
     describe("should be able to withdraw small amounts", () => {
